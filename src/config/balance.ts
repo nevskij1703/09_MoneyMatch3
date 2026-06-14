@@ -43,8 +43,10 @@ export interface Balance {
     colorLineLen: number;
     /** Радиус взрыва «Бомбы» (bomb) из квадрата 2×2: 1 = область 3×3. */
     bombRadius: number;
-    /** Бонус-множитель ценности за каждый шаг каскада сверх первого: mult = 1 + (combo−1)·comboStep. */
-    comboStep: number;
+    /** Денежный бонус за 1-й уровень комбо (2-е натуральное исчезновение за ход). По умолч. +5%. */
+    comboBaseBonus: number;
+    /** Прирост денежного бонуса за каждый следующий уровень комбо. По умолч. +1% (×2→+6%, ×3→+7%). */
+    comboBonusStep: number;
     /** Масштаб денег за плитку: collect = tierValue(t) × baseTileValue × investmentMultiplier. */
     baseTileValue: number;
   };
@@ -83,9 +85,10 @@ export const balance: Balance = {
   match: {
     minLine: 3,        // 3 в ряд по верт./гориз. схлопываются
     colorLineLen: 5,   // линия из 5 → спецтайл «Магнит» (сносит весь тир)
-    bombRadius: 1,     // квадрат 2×2 → «Бомба»: взрыв 3×3 (радиус 1)
-    comboStep: 0.25,   // каждый шаг каскада дороже: 2-й каскад ×1.25, 3-й ×1.5, …
-    baseTileValue: 5,  // T1-плитка = $10, T4-плитка = $80 (× tierValue 2^t)
+    bombRadius: 1,        // квадрат 2×2 → «Бомба»: взрыв 3×3 (радиус 1)
+    comboBaseBonus: 0.05, // Комбо → +5% к деньгам шага
+    comboBonusStep: 0.01, // каждый следующий уровень: +1% (Комбо ×2 → +6%, ×3 → +7%, …)
+    baseTileValue: 5,     // T1-плитка = $10, T4-плитка = $80 (× tierValue 2^t)
   },
   economy: {
     startBalance: 0,

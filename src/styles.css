@@ -731,6 +731,26 @@ body {
     1px -1px 0 #3a2a00, -1px 1px 0 #3a2a00;
 }
 
+/* Баннер комбо над полем (создаётся динамически в GameApp.showCombo, анимируется WAAPI). */
+.combo-banner {
+  position: absolute;
+  left: 50%;
+  top: 318px;
+  transform: translate(-50%, 0);
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 46px;
+  color: #ffd23f;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  text-shadow:
+    0 0 4px #3a2a00,
+    2px 2px 0 #3a2a00, -2px -2px 0 #3a2a00, 2px -2px 0 #3a2a00, -2px 2px 0 #3a2a00,
+    0 6px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 60;
+}
+
 /* ═══════════════════ MoneyMatch3: баланс · цепочка · бустеры · Баффет ═══════════════════ */
 
 /* Плашка Баланса (главная валюта). */

@@ -46,14 +46,14 @@ src/
 │
 ├── config/
 │   └── balance.ts           ЕДИНЫЙ источник баланса (board, tierCount, match.{minLine,colorLineLen,
-│                            bombRadius,comboStep,baseTileValue}, economy, boosters×4)
+│                            bombRadius,comboBaseBonus,comboBonusStep,baseTileValue}, economy, boosters×4)
 │
 ├── core/                    ЛОГИКА (pure, без DOM)
 │   ├── board.ts             isValidTier, idxToXY/xyToIdx, getSpecial, makeBoard
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches, activateSpecial,
 │   │                        expandClearWithSpecials, applyClear/resolveStep, applyGravityAndRefill,
 │   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board
-│   ├── economy.ts           tileCollectValue, cascadeComboMultiplier, clearValue, addCollected
+│   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, clearValue, addCollected
 │   ├── money.ts             tierValue=2^t, formatMoney, getTierStyle
 │   ├── boosters.ts          BoosterId (shuffle/hammer/lightning/magnet) + shuffleBoard
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
@@ -92,10 +92,10 @@ src/
    порогом определяет соседа → `trySwap(a,b)`. Спецтайл → применение на месте; иначе `swapCells`
    + проверка `hasMatchAny` (нет матча → откат назад).
 2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: обнуление, спавн спецтайлов,
-   `applyGravityAndRefill`) пока есть матчи — `comboIndex` растёт. Логика СРАЗУ, поле консистентно.
-3. На каждом шаге `onCollected(tiers, comboIndex, spawnedSpecial)` → [GameApp](../src/app/GameApp.ts)
-   `economy.addCollected` (Баланс растёт), HUD refresh + поп «+$N», реакция Баффета (`comboIndex≥2`
-   или спецтайл).
+   `applyGravityAndRefill`) пока есть матчи — уровень комбо растёт. Логика СРАЗУ, поле консистентно.
+3. На каждом шаге `onCollected(tiers, comboLevel, spawnedSpecial)` → [GameApp](../src/app/GameApp.ts)
+   `economy.addCollected` (Баланс растёт), HUD refresh + поп «+$N», баннер «Комбо ×N» (`showCombo`) и
+   реакция Баффета (комбо ≥ 1 или спецтайл). Комбо считает только натуральные матч-шаги.
 4. Анимация шага: pop схлопнутых + морф спецтайлов + падение уцелевших + досыпка (WAAPI). По
    оседании — анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
 

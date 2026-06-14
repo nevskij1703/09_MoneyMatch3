@@ -24,6 +24,7 @@ export class GameApp {
   private buffett!: BuffettView;
   private board!: BoardView;
   private actionBar!: ActionBarView;
+  private comboEl: HTMLDivElement | null = null;
 
   constructor(private stage: HTMLElement) {
     this.layout();
@@ -33,7 +34,7 @@ export class GameApp {
     this.buffett = new BuffettView(stage);
 
     this.board = new BoardView(stage, getData().board, {
-      onCollected: (tiers, comboIndex, spawnedSpecial) => this.onCollected(tiers, comboIndex, spawnedSpecial),
+      onCollected: (tiers, comboLevel, spawnedSpecial) => this.onCollected(tiers, comboLevel, spawnedSpecial),
       onPersist: () => save(),
     });
 
@@ -63,16 +64,40 @@ export class GameApp {
   };
   private onPageHide = (): void => { save(); };
 
-  /** Шаг каскада схлопнут: начислить в Баланс, обновить HUD, реакция Баффета на комбо/спецтайл. */
-  private onCollected(tiers: Tier[], comboIndex: number, spawnedSpecial: boolean): number {
+  /** Шаг каскада схлопнут: начислить в Баланс, обновить HUD, показать комбо, реакция Баффета. */
+  private onCollected(tiers: Tier[], comboLevel: number, spawnedSpecial: boolean): number {
     let gained = 0;
-    update((d) => { gained = addCollected(d, tiers, comboIndex); });
+    update((d) => { gained = addCollected(d, tiers, comboLevel); });
     this.hud.refresh();
     this.hud.bumpBalance();
     this.actionBar.refresh();
-    if (comboIndex >= 2 || spawnedSpecial) this.buffett.popReaction();
+    if (comboLevel >= 1) this.showCombo(comboLevel);
+    if (comboLevel >= 1 || spawnedSpecial) this.buffett.popReaction();
     save();
     return gained;
+  }
+
+  /** Крупный баннер «Комбо ×N» над полем (pop + всплытие + растворение). level ≥ 1. */
+  private showCombo(level: number): void {
+    if (this.comboEl) this.comboEl.remove();
+    const elc = document.createElement('div');
+    elc.className = 'combo-banner';
+    elc.textContent = level === 1 ? 'Комбо' : `Комбо ×${level}`;
+    elc.style.fontSize = `${42 + Math.min(level, 6) * 3}px`;
+    if (level >= 5) elc.style.color = '#ff5252';
+    else if (level >= 3) elc.style.color = '#ff9f1c';
+    this.stage.appendChild(elc);
+    this.comboEl = elc;
+    const anim = elc.animate(
+      [
+        { transform: 'translate(-50%,0) scale(0.5)', opacity: 0 },
+        { transform: 'translate(-50%,0) scale(1.18)', opacity: 1, offset: 0.25 },
+        { transform: 'translate(-50%,0) scale(1)', opacity: 1, offset: 0.62 },
+        { transform: 'translate(-50%,-34px) scale(1.05)', opacity: 0 },
+      ],
+      { duration: 1000, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'forwards' },
+    );
+    anim.onfinish = () => { elc.remove(); if (this.comboEl === elc) this.comboEl = null; };
   }
 
   private onBooster(id: BoosterId): void {

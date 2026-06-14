@@ -193,7 +193,8 @@ export function initDevPanel(refresh: () => void): void {
   type Dom = 'match' | 'economy';
   const quick: Array<{ key: string; label: string; step: number; domain: Dom }> = [
     { key: 'minLine', label: 'match.minLine', step: 1, domain: 'match' },
-    { key: 'comboStep', label: 'match.comboStep', step: 0.05, domain: 'match' },
+    { key: 'comboBaseBonus', label: 'match.comboBaseBonus', step: 0.01, domain: 'match' },
+    { key: 'comboBonusStep', label: 'match.comboBonusStep', step: 0.01, domain: 'match' },
     { key: 'baseTileValue', label: 'match.baseTileValue', step: 1, domain: 'match' },
     { key: 'investmentMultiplier', label: 'economy.investMult', step: 0.5, domain: 'economy' },
   ];

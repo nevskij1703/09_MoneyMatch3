@@ -21,9 +21,10 @@ import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
 export interface BoardViewCallbacks {
-  /** Шаг каскада собран. tiers — схлопнутые тиры, comboIndex — глубина каскада (1+),
-   *  spawnedSpecial — родился ли спецтайл. Возвращает начисленную сумму (для попа «+$N»). */
-  onCollected(tiers: Tier[], comboIndex: number, spawnedSpecial: boolean): number;
+  /** Шаг каскада собран. tiers — схлопнутые тиры, comboLevel — уровень комбо (0 = без комбо,
+   *  1 = «Комбо», 2 = «Комбо ×2», …; считаются только натуральные матч-шаги), spawnedSpecial —
+   *  родился ли спецтайл. Возвращает начисленную сумму (для попа «+$N»). */
+  onCollected(tiers: Tier[], comboLevel: number, spawnedSpecial: boolean): number;
   onPersist(): void;
 }
 
@@ -45,6 +46,7 @@ export class BoardView {
   private cellEls: HTMLDivElement[] = [];
   private tileByIndex = new Map<number, HTMLElement>();
   private busy = false;
+  private comboNatural = 0; // натуральные матч-шаги текущего хода (для комбо; спецтайлы не считаются)
 
   // Жест свайпа.
   private downIdx = -1;
@@ -213,19 +215,23 @@ export class BoardView {
     const sp = getSpecial(this.field);
     const aSpec = sp[a];
     const bSpec = sp[b];
+    this.comboNatural = 0; // новый ход — сбрасываем счётчик комбо
 
     if (aSpec || bSpec) {
       // Применение спецтайла: срабатывает на месте (без обмена). Цель color — тир соседа.
+      // Сам взрыв бустера комбо НЕ повышает (comboLevel 0).
       const seed = new Set<number>();
       if (aSpec) for (const x of activateSpecial(this.field, a, this.field.cells[b])) seed.add(x);
       if (bSpec) for (const x of activateSpecial(this.field, b, this.field.cells[a])) seed.add(x);
-      await this.runCascadeFromSeed(seed);
+      const seedStep = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+      await this.animateStep(seedStep, 0);
+      await this.runNaturalCascade(undefined);
     } else if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
       // Обычный обмен: меняем, проверяем матч, при отсутствии — откат.
       swapCells(this.field, a, b);
       await this.swapTilesVisual(a, b);
       if (hasMatchAny(this.field)) {
-        await this.runCascade([a, b]);
+        await this.runNaturalCascade([a, b]);
       } else {
         swapCells(this.field, a, b);
         await this.swapTilesVisual(a, b); // анимация назад
@@ -250,34 +256,25 @@ export class BoardView {
     await this.delay(SWAP_DUR);
   }
 
-  /** Каскад, инициированный готовым clear-set (применение спецтайла). */
-  private async runCascadeFromSeed(seed: Set<number>): Promise<void> {
-    let combo = 1;
-    const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
-    await this.animateStep(step, combo);
-    while (true) {
-      const s = resolveStep(this.field, balance.tierCount, Math.random);
-      if (!s) break;
-      combo++;
-      await this.animateStep(s, combo);
-    }
-  }
-
-  /** Каскад по матчам поля; `moved` — клетки свапа (anchor спавна на первом шаге). */
-  private async runCascade(moved?: number[]): Promise<void> {
-    let combo = 0;
+  /**
+   * Каскад натуральных матчей поля; `moved` — клетки свапа (anchor спавна на 1-м шаге).
+   * Комбо: 1-й натуральный шаг = уровень 0 (без комбо), 2-й = 1 («Комбо»), 3-й = 2 («Комбо ×2») …
+   * Взрывы спецтайлов внутри шага (цепная реакция) уровень комбо не повышают.
+   */
+  private async runNaturalCascade(moved?: number[]): Promise<void> {
     let first = true;
     while (true) {
       const s = resolveStep(this.field, balance.tierCount, Math.random, first ? moved : undefined);
       first = false;
       if (!s) break;
-      combo++;
-      await this.animateStep(s, combo);
+      const comboLevel = this.comboNatural;
+      this.comboNatural++;
+      await this.animateStep(s, comboLevel);
     }
   }
 
   /** Анимация одного шага каскада: pop схлопнутых → морф спецтайлов → гравитация/досыпка. */
-  private async animateStep(step: CascadeStep, comboIndex: number): Promise<void> {
+  private async animateStep(step: CascadeStep, comboLevel: number): Promise<void> {
     const center = this.centroidOf(step.cleared.length ? step.cleared : step.spawns.map((s) => s.idx));
 
     // 1) Pop схлопнутых плиток.
@@ -299,7 +296,7 @@ export class BoardView {
     playCollectFx(this.panel, this.iconSize, center);
 
     // 2) Начисление + поп «+$N» + реакция Баффета (через GameApp).
-    const gained = this.callbacks.onCollected(step.clearedTiers, comboIndex, step.spawns.length > 0);
+    const gained = this.callbacks.onCollected(step.clearedTiers, comboLevel, step.spawns.length > 0);
     this.popGain(gained, center);
 
     // 3) Морф anchor-клеток в спецтайлы (плитка уже на месте, не схлопнута).
