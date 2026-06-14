@@ -6,7 +6,8 @@
 
 import { getData, update, reset } from '../core/storage';
 import { balance } from '../config/balance';
-import { makeBoard } from '../core/board';
+import { makeBoard, getSpecial, isValidTier } from '../core/board';
+import { hasAnyValidMove } from '../core/match3';
 import { shuffleBoard } from '../core/boosters';
 import {
   exportBalanceJSON,
@@ -132,7 +133,23 @@ export function initDevPanel(refresh: () => void): void {
     update((d) => { shuffleBoard(d.board); });
     refresh();
   };
-  boardTab.append(clearBtn, randBtn, fillT1, shuffleBtn);
+  // Спавн спецтайла в случайную свободную (не-спец) клетку — для проверки эффектов.
+  const spawnSpecial = (kind: 'bomb' | 'color'): void => {
+    update((d) => {
+      const sp = getSpecial(d.board);
+      const cand: number[] = [];
+      for (let i = 0; i < d.board.cells.length; i++) if (isValidTier(d.board.cells[i]) && !sp[i]) cand.push(i);
+      if (cand.length) sp[cand[Math.floor(Math.random() * cand.length)]] = kind;
+    });
+    refresh();
+  };
+  const bombBtn = btn('Спавн 💣', 'mm-spawn-bomb');
+  bombBtn.onclick = () => spawnSpecial('bomb');
+  const colorBtn = btn('Спавн 🧲', 'mm-spawn-color');
+  colorBtn.onclick = () => spawnSpecial('color');
+  const movesBtn = btn('Ходы?', 'mm-moves');
+  movesBtn.onclick = () => alert(hasAnyValidMove(getData().board) ? 'Ходы есть' : 'ДЕДЛОК (нет ходов)');
+  boardTab.append(clearBtn, randBtn, fillT1, shuffleBtn, bombBtn, colorBtn, movesBtn);
 
   // --- Вкладка «Бустеры» ---
   const boosterTab = makeTab('boost', 'Бустеры');
@@ -175,7 +192,7 @@ export function initDevPanel(refresh: () => void): void {
   // Быстрые ползунки match.
   type Dom = 'match' | 'economy';
   const quick: Array<{ key: string; label: string; step: number; domain: Dom }> = [
-    { key: 'minChain', label: 'match.minChain', step: 1, domain: 'match' },
+    { key: 'minLine', label: 'match.minLine', step: 1, domain: 'match' },
     { key: 'comboStep', label: 'match.comboStep', step: 0.05, domain: 'match' },
     { key: 'baseTileValue', label: 'match.baseTileValue', step: 1, domain: 'match' },
     { key: 'investmentMultiplier', label: 'economy.investMult', step: 0.5, domain: 'economy' },

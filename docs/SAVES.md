@@ -11,11 +11,15 @@
   "data": {
     "balance": 0,                 // главная валюта (собранные деньги)
     "diamonds": 50,               // премиум 💎
-    "board": { "cols": 6, "rows": 6, "cells": [ /* 36 × (Tier|null) */ ] },
+    "board": {                    // поле match-3
+      "cols": 6, "rows": 6,
+      "cells":   [ /* 36 × (Tier|null) */ ],
+      "special": [ /* 36 × ('bomb'|'color'|null) — спецтайлы на поле */ ]
+    },
     "investmentMultiplier": 1,    // множитель ценности сбора (будущие инвестиции)
     "boosters": { "shuffle": 3, "hammer": 3, "lightning": 3, "magnet": 3 },
     "totalCollected": 0,          // lifetime собрано (стат + хук прогрессии)
-    "bestChain": 0,               // самая длинная цепочка (стат)
+    "bestCombo": 0,               // самый глубокий каскад-комбо (стат)
     "settings": { "sound": true, "vibration": true },
     "lastActiveTs": 0
   }
@@ -32,6 +36,9 @@
 - **`mergeDefaults`** ([storage.ts](../src/core/storage.ts)) при `load()` собирает `data` поле
   за полем по дефолтам и валидации (НЕ spread) — мусор/легаси-поля не утекают. Поле берётся из
   сейва только при совпадении форм-фактора (`cols/rows`), иначе генерируется заново.
+  `board.special` нормализуется (`normalizeSpecial`): длина = `cells.length`, элементы только
+  `'bomb'`/`'color'`/`null` (отсутствие/мусор → массив `null`). При загрузке стартовые матчи
+  старого поля тихо схлопываются (`settleInitial` в boardView), затем гарантируется ход.
 - Любое breaking-изменение формата (новое поле, переименование, смена типа) = новая функция
   миграции. **До первого RC** можно расширять `migrations[1]` свободно (живых юзеров нет).
 

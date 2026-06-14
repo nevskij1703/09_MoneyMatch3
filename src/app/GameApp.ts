@@ -33,7 +33,7 @@ export class GameApp {
     this.buffett = new BuffettView(stage);
 
     this.board = new BoardView(stage, getData().board, {
-      onCollected: (tiers) => this.onCollected(tiers),
+      onCollected: (tiers, comboIndex, spawnedSpecial) => this.onCollected(tiers, comboIndex, spawnedSpecial),
       onPersist: () => save(),
     });
 
@@ -63,14 +63,14 @@ export class GameApp {
   };
   private onPageHide = (): void => { save(); };
 
-  /** Цепочка собрана: начислить в Баланс, обновить HUD, реакция Баффета на комбо. */
-  private onCollected(tiers: Tier[]): number {
+  /** Шаг каскада схлопнут: начислить в Баланс, обновить HUD, реакция Баффета на комбо/спецтайл. */
+  private onCollected(tiers: Tier[], comboIndex: number, spawnedSpecial: boolean): number {
     let gained = 0;
-    update((d) => { gained = addCollected(d, tiers); });
+    update((d) => { gained = addCollected(d, tiers, comboIndex); });
     this.hud.refresh();
     this.hud.bumpBalance();
     this.actionBar.refresh();
-    if (tiers.length >= 4) this.buffett.popReaction();
+    if (comboIndex >= 2 || spawnedSpecial) this.buffett.popReaction();
     save();
     return gained;
   }

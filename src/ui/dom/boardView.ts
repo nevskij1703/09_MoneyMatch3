@@ -1,18 +1,19 @@
-// Поле match-3 (вариант «соединение цепочки»): декоративный стол + сетка 6×6.
+// Поле классического match-3: декоративный стол + сетка 6×6.
 //
-// Ввод: игрок зажимает плитку и ВЕДЁТ палец по соседним ОДИНАКОВЫМ плиткам —
-// строится цепочка (подсветка клеток + соединительная линия). Откат назад —
-// проводя на предпоследнюю клетку. На отпускании, если длина ≥ minChain:
-//   1) cells цепочки обнуляются (collectChain), деньги уходят в Баланс (onCollected);
-//   2) гравитация (applyGravityAndRefill): уцелевшие плитки падают вниз, сверху
-//      досыпаются новые БЕСПЛАТНО (тех же тиров) — с анимацией падения.
-// Логика поля выполняется СРАЗУ (поле всегда консистентно для сейва), визуал —
-// анимируется следом.
+// Ввод: игрок ЗАЖИМАЕТ плитку и СВАЙПАЕТ к ортогональному соседу → они меняются
+// местами. Если обмен создал линию 3+ или квадрат 2×2 — поле разрешается каскадами
+// (схлоп → деньги в Баланс → спецтайлы за 2×2/линию-5 → гравитация и досыпка →
+// повтор). Свайп со спецтайлом «применяет» его (без обмена). Свап без матча
+// откатывается. Логика поля — pure-функции core/match3.ts; здесь — ввод и анимации.
 
-import type { FieldState, Tier } from '../../types';
-import { idxToXY, isValidTier, xyToIdx } from '../../core/board';
+import type { FieldState, Tier, SpecialKind } from '../../types';
+import type { CascadeStep } from '../../core/match3';
+import { idxToXY, isValidTier, xyToIdx, getSpecial } from '../../core/board';
 import { balance } from '../../config/balance';
-import { canExtendChain, collectChain, applyGravityAndRefill, hasAnyChain } from '../../core/match3';
+import {
+  areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep,
+  activateSpecial, hasAnyValidMove,
+} from '../../core/match3';
 import { shuffleBoard } from '../../core/boosters';
 import { formatMoney } from '../../core/money';
 import { el, centerTransform } from './dom';
@@ -20,8 +21,9 @@ import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
 export interface BoardViewCallbacks {
-  /** Цепочка собрана (tiers — собранные тиры). Возвращает начисленную сумму (для попа «+$N»). */
-  onCollected(tiers: Tier[]): number;
+  /** Шаг каскада собран. tiers — схлопнутые тиры, comboIndex — глубина каскада (1+),
+   *  spawnedSpecial — родился ли спецтайл. Возвращает начисленную сумму (для попа «+$N»). */
+  onCollected(tiers: Tier[], comboIndex: number, spawnedSpecial: boolean): number;
   onPersist(): void;
 }
 
@@ -30,15 +32,10 @@ const PANEL_LEFT = 13;
 const PANEL_TOP = 299;
 const PANEL_W = 360;
 const PANEL_H = 345;
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const EASE_OUT = 'cubic-bezier(0.22,0.61,0.36,1)';
 const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
-
-interface ChainState {
-  cells: number[];
-  tier: Tier;
-}
+const SWAP_DUR = 150;
 
 export class BoardView {
   private cellW: number;
@@ -47,9 +44,12 @@ export class BoardView {
   private panel: HTMLDivElement;
   private cellEls: HTMLDivElement[] = [];
   private tileByIndex = new Map<number, HTMLElement>();
-  private chain: ChainState | null = null;
   private busy = false;
-  private connectorLine: SVGPolylineElement;
+
+  // Жест свайпа.
+  private downIdx = -1;
+  private downLocal = { x: 0, y: 0 };
+  private gestureUsed = false;
 
   constructor(
     stage: HTMLElement,
@@ -72,21 +72,12 @@ export class BoardView {
     });
 
     this.buildCells();
-
-    // SVG-коннектор цепочки (рисуется поверх плиток).
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${PANEL_W} ${PANEL_H}`);
-    svg.setAttribute('class', 'chain-connector');
-    this.connectorLine = document.createElementNS(SVG_NS, 'polyline');
-    this.connectorLine.setAttribute('class', 'chain-line');
-    svg.appendChild(this.connectorLine);
-    this.panel.appendChild(svg);
-
-    this.rebuildTiles();
+    this.settleInitial();   // убрать случайные матчи из загруженного поля + гарантировать ход
 
     this.panel.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
   }
 
   private buildCells(): void {
@@ -101,7 +92,7 @@ export class BoardView {
     }
   }
 
-  /** Полный rebuild всех плиток по field. */
+  /** Полный rebuild всех плиток по field (включая спецтайлы). */
   rebuildTiles(): void {
     for (const t of this.tileByIndex.values()) t.remove();
     this.tileByIndex.clear();
@@ -109,10 +100,10 @@ export class BoardView {
       const cell = this.field.cells[i];
       if (isValidTier(cell)) this.tileByIndex.set(i, this.makeTile(i, cell));
     }
-    this.clearChainVisual();
+    this.clearSelection();
   }
 
-  /** Создать плитку (тир-арт + glow), позиционированную в клетке idx. */
+  /** Создать плитку (тир-арт + glow + спец-оверлей по field.special[idx]). */
   private makeTile(idx: number, tier: Tier): HTMLElement {
     const c = this.cellCenter(idx);
     const tile = el('div', {
@@ -130,17 +121,31 @@ export class BoardView {
 
     el('div', { cls: 'tier-glow', parent: tile });
 
+    const sp = getSpecial(this.field)[idx];
+    if (sp) this.applySpecialVisual(tile, sp);
+
     this.panel.appendChild(tile);
     return tile;
   }
 
-  private getGlow(tile: HTMLElement): HTMLElement | null {
-    return tile.querySelector('.tier-glow');
+  /** Навесить спец-вид (рамка-класс + значок) на существующую плитку. */
+  private applySpecialVisual(tile: HTMLElement, kind: SpecialKind): void {
+    tile.classList.add('special', kind === 'bomb' ? 'special-bomb' : 'special-color');
+    if (!tile.querySelector('.special-badge')) {
+      el('div', { cls: 'special-badge', text: kind === 'bomb' ? '💣' : '🧲', parent: tile });
+    }
   }
 
   private cellCenter(idx: number): { x: number; y: number } {
     const { x, y } = idxToXY(idx, this.field.cols);
     return { x: x * this.cellW + this.cellW / 2, y: y * this.cellH + this.cellH / 2 };
+  }
+
+  private centroidOf(indices: number[]): { x: number; y: number } {
+    if (!indices.length) return { x: PANEL_W / 2, y: PANEL_H / 2 };
+    let sx = 0, sy = 0;
+    for (const i of indices) { const c = this.cellCenter(i); sx += c.x; sy += c.y; }
+    return { x: sx / indices.length, y: sy / indices.length };
   }
 
   /** Перевод координат указателя (screen) в panel-local design-координаты. */
@@ -156,69 +161,127 @@ export class BoardView {
     const cx = Math.floor(localX / this.cellW);
     const cy = Math.floor(localY / this.cellH);
     if (cx < 0 || cy < 0 || cx >= this.field.cols || cy >= this.field.rows) return -1;
-    const innerX = localX - cx * this.cellW - this.cellW / 2;
-    const innerY = localY - cy * this.cellH - this.cellH / 2;
-    const hitRadius = Math.min(this.cellW, this.cellH) * 0.5;
-    if (innerX * innerX + innerY * innerY > hitRadius * hitRadius) return -1;
     return xyToIdx(cx, cy, this.field.cols);
   }
 
-  // ─── Input (соединение цепочки) ─────────────────────────────────────────────
+  // ─── Ввод (свайп-обмен) ─────────────────────────────────────────────────────
 
   private onPointerDown = (e: PointerEvent): void => {
     if (this.busy) return;
     const local = this.pointerToLocal(e.clientX, e.clientY);
     const idx = this.localToCell(local.x, local.y);
-    const tier = idx !== -1 ? this.field.cells[idx] : null;
-    if (idx === -1 || !isValidTier(tier)) {
-      this.clearChain();
-      return;
-    }
-    this.chain = { cells: [idx], tier };
+    if (idx === -1) { this.downIdx = -1; return; }
+    this.downIdx = idx;
+    this.downLocal = local;
+    this.gestureUsed = false;
     try { this.panel.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    this.refreshChainVisual();
+    this.setSelected(idx, true);
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.chain || this.busy) return;
+    if (this.busy || this.downIdx === -1 || this.gestureUsed) return;
     const local = this.pointerToLocal(e.clientX, e.clientY);
-    const idx = this.localToCell(local.x, local.y);
-    if (idx === -1) return;
-    const chain = this.chain.cells;
-    // Откат: ведём на предпоследнюю клетку → снимаем последнюю.
-    if (chain.length >= 2 && idx === chain[chain.length - 2]) {
-      chain.pop();
-      this.refreshChainVisual();
-      return;
-    }
-    if (canExtendChain(chain, idx, this.field, balance.match.diagonal)) {
-      chain.push(idx);
-      this.refreshChainVisual();
-    }
+    const dx = local.x - this.downLocal.x;
+    const dy = local.y - this.downLocal.y;
+    const thresh = Math.min(this.cellW, this.cellH) * 0.45;
+    if (Math.abs(dx) < thresh && Math.abs(dy) < thresh) return;
+
+    const { x, y } = idxToXY(this.downIdx, this.field.cols);
+    let nx = x, ny = y;
+    if (Math.abs(dx) >= Math.abs(dy)) nx += dx > 0 ? 1 : -1;
+    else ny += dy > 0 ? 1 : -1;
+    if (nx < 0 || ny < 0 || nx >= this.field.cols || ny >= this.field.rows) return; // край — ждём другого направления
+
+    this.gestureUsed = true;
+    const a = this.downIdx;
+    const b = xyToIdx(nx, ny, this.field.cols);
+    this.setSelected(a, false);
+    this.downIdx = -1;
+    void this.trySwap(a, b);
   };
 
   private onPointerUp = (): void => {
-    if (!this.chain) return;
-    const chain = this.chain.cells;
-    this.chain = null;
-    if (chain.length >= balance.match.minChain) {
-      this.collect(chain);
-    } else {
-      this.clearChainVisual();
-    }
+    if (this.downIdx !== -1) this.setSelected(this.downIdx, false);
+    this.downIdx = -1;
   };
 
-  // ─── Сбор + гравитация ──────────────────────────────────────────────────────
+  // ─── Свап + разрешение поля ──────────────────────────────────────────────────
 
-  private collect(chain: number[]): void {
+  private async trySwap(a: number, b: number): Promise<void> {
+    if (this.busy || !areOrthoNeighbors(a, b, this.field.cols)) return;
     this.busy = true;
+    const sp = getSpecial(this.field);
+    const aSpec = sp[a];
+    const bSpec = sp[b];
 
-    // 1) Логика: обнулить цепочку, затем гравитация+досыпка — поле сразу полное.
-    const tiers = collectChain(this.field, chain);
-    const headCenter = this.cellCenter(chain[chain.length - 1]!);
+    if (aSpec || bSpec) {
+      // Применение спецтайла: срабатывает на месте (без обмена). Цель color — тир соседа.
+      const seed = new Set<number>();
+      if (aSpec) for (const x of activateSpecial(this.field, a, this.field.cells[b])) seed.add(x);
+      if (bSpec) for (const x of activateSpecial(this.field, b, this.field.cells[a])) seed.add(x);
+      await this.runCascadeFromSeed(seed);
+    } else if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
+      // Обычный обмен: меняем, проверяем матч, при отсутствии — откат.
+      swapCells(this.field, a, b);
+      await this.swapTilesVisual(a, b);
+      if (hasMatchAny(this.field)) {
+        await this.runCascade([a, b]);
+      } else {
+        swapCells(this.field, a, b);
+        await this.swapTilesVisual(a, b); // анимация назад
+      }
+    }
 
-    // 2) Визуал сбора: pop каждой собранной плитки + искры + «+$N».
-    chain.forEach((idx, k) => {
+    this.ensureSolvable();
+    this.busy = false;
+    this.callbacks.onPersist();
+  }
+
+  /** Анимировать обмен элементов двух клеток + переставить их в карте. */
+  private async swapTilesVisual(a: number, b: number): Promise<void> {
+    const ta = this.tileByIndex.get(a);
+    const tb = this.tileByIndex.get(b);
+    const ca = this.cellCenter(a);
+    const cb = this.cellCenter(b);
+    if (ta) this.animTransform(ta, centerTransform(ca.x, ca.y, 1), centerTransform(cb.x, cb.y, 1), SWAP_DUR, EASE_OUT);
+    if (tb) this.animTransform(tb, centerTransform(cb.x, cb.y, 1), centerTransform(ca.x, ca.y, 1), SWAP_DUR, EASE_OUT);
+    if (ta) this.tileByIndex.set(b, ta); else this.tileByIndex.delete(b);
+    if (tb) this.tileByIndex.set(a, tb); else this.tileByIndex.delete(a);
+    await this.delay(SWAP_DUR);
+  }
+
+  /** Каскад, инициированный готовым clear-set (применение спецтайла). */
+  private async runCascadeFromSeed(seed: Set<number>): Promise<void> {
+    let combo = 1;
+    const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+    await this.animateStep(step, combo);
+    while (true) {
+      const s = resolveStep(this.field, balance.tierCount, Math.random);
+      if (!s) break;
+      combo++;
+      await this.animateStep(s, combo);
+    }
+  }
+
+  /** Каскад по матчам поля; `moved` — клетки свапа (anchor спавна на первом шаге). */
+  private async runCascade(moved?: number[]): Promise<void> {
+    let combo = 0;
+    let first = true;
+    while (true) {
+      const s = resolveStep(this.field, balance.tierCount, Math.random, first ? moved : undefined);
+      first = false;
+      if (!s) break;
+      combo++;
+      await this.animateStep(s, combo);
+    }
+  }
+
+  /** Анимация одного шага каскада: pop схлопнутых → морф спецтайлов → гравитация/досыпка. */
+  private async animateStep(step: CascadeStep, comboIndex: number): Promise<void> {
+    const center = this.centroidOf(step.cleared.length ? step.cleared : step.spawns.map((s) => s.idx));
+
+    // 1) Pop схлопнутых плиток.
+    step.cleared.forEach((idx, k) => {
       const tile = this.tileByIndex.get(idx);
       this.tileByIndex.delete(idx);
       if (!tile) return;
@@ -226,33 +289,35 @@ export class BoardView {
       const a = tile.animate(
         [
           { transform: centerTransform(c.x, c.y, 1), opacity: 1 },
-          { transform: centerTransform(c.x, c.y, 1.25), opacity: 1, offset: 0.35 },
+          { transform: centerTransform(c.x, c.y, 1.22), opacity: 1, offset: 0.35 },
           { transform: centerTransform(c.x, c.y, 0.1), opacity: 0 },
         ],
-        { duration: 240, delay: k * 18, easing: EASE_OUT, fill: 'forwards' },
+        { duration: 230, delay: Math.min(k, 6) * 14, easing: EASE_OUT, fill: 'forwards' },
       );
       a.onfinish = () => tile.remove();
     });
-    playCollectFx(this.panel, this.iconSize, headCenter);
+    playCollectFx(this.panel, this.iconSize, center);
 
-    const gained = this.callbacks.onCollected(tiers);
-    this.popGain(gained, headCenter);
-    this.clearChainVisual();
+    // 2) Начисление + поп «+$N» + реакция Баффета (через GameApp).
+    const gained = this.callbacks.onCollected(step.clearedTiers, comboIndex, step.spawns.length > 0);
+    this.popGain(gained, center);
 
-    // 3) Гравитация+досыпка (логика выполнена сразу, анимируем падение).
-    this.animateGravity();
-    this.callbacks.onPersist();
-  }
+    // 3) Морф anchor-клеток в спецтайлы (плитка уже на месте, не схлопнута).
+    for (const s of step.spawns) {
+      let tile = this.tileByIndex.get(s.idx);
+      if (!tile) { tile = this.makeTile(s.idx, s.tier); this.tileByIndex.set(s.idx, tile); }
+      tile.dataset.tier = String(s.tier);
+      this.applySpecialVisual(tile, s.kind);
+    }
 
-  private animateGravity(): void {
-    const { falls, spawns } = applyGravityAndRefill(this.field, balance.tierCount, Math.random);
+    // 4) Гравитация (падения уцелевших — включая спецтайлы) + досыпка сверху.
     const oldMap = this.tileByIndex;
     const newMap = new Map<number, HTMLElement>();
-    const fromSet = new Set(falls.map((f) => f.from));
+    const fromSet = new Set(step.falls.map((f) => f.from));
     for (const [idx, tile] of oldMap) if (!fromSet.has(idx)) newMap.set(idx, tile);
 
-    let maxDur = 0;
-    for (const f of falls) {
+    let maxDur = 230;
+    for (const f of step.falls) {
       const tile = oldMap.get(f.from);
       if (!tile) continue;
       newMap.set(f.to, tile);
@@ -262,64 +327,65 @@ export class BoardView {
       maxDur = Math.max(maxDur, dur);
       this.animTransform(tile, centerTransform(from.x, from.y, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL);
     }
-    for (const s of spawns) {
-      const to = this.cellCenter(s.idx);
+    for (const r of step.refills) {
+      const to = this.cellCenter(r.idx);
       const startY = -this.cellH * 0.6;
-      const tile = this.makeTile(s.idx, s.tier);
+      const tile = this.makeTile(r.idx, r.tier);
       const dur = 190 + Math.abs(to.y - startY) * 1.3;
       maxDur = Math.max(maxDur, dur);
       this.animTransform(tile, centerTransform(to.x, startY, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL);
-      newMap.set(s.idx, tile);
+      newMap.set(r.idx, tile);
     }
     this.tileByIndex = newMap;
 
-    // По завершении падения — анти-дедлок (на всякий случай) и снятие busy.
-    window.setTimeout(() => {
-      if (!hasAnyChain(this.field, balance.match.minChain, balance.match.diagonal)) {
-        shuffleBoard(this.field, Math.random);
-        this.rebuildTiles();
-        this.callbacks.onPersist();
+    await this.delay(maxDur + 30);
+  }
+
+  /** Прогнать стартовые матчи (старый сейв) без денег/анимации + гарантировать ход. */
+  private settleInitial(): void {
+    let guard = 0;
+    while (hasMatchAny(this.field) && guard++ < 80) {
+      const m = findMatches(this.field);
+      applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random);
+    }
+    this.ensureSolvable();
+    this.rebuildTiles();
+  }
+
+  /** Если ходов нет — перемешать (и снять возникшие матчи) до появления хода. */
+  private ensureSolvable(): void {
+    if (hasAnyValidMove(this.field)) return;
+    let guard = 0;
+    do {
+      shuffleBoard(this.field, Math.random);
+      let s = 0;
+      while (hasMatchAny(this.field) && s++ < 80) {
+        const m = findMatches(this.field);
+        applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random);
       }
-      this.busy = false;
-    }, maxDur + 40);
+    } while (!hasAnyValidMove(this.field) && guard++ < 50);
+    this.rebuildTiles();
   }
 
   /** Анимировать transform от→к (оба keyframe явные); финальный inline = to. */
-  private animTransform(node: HTMLElement, from: string, to: string, dur: number, easing: string, onDone?: () => void): void {
+  private animTransform(node: HTMLElement, from: string, to: string, dur: number, easing: string): void {
     node.style.transform = to;
-    const a = node.animate([{ transform: from }, { transform: to }], { duration: dur, easing });
-    if (onDone) a.onfinish = onDone;
+    node.animate([{ transform: from }, { transform: to }], { duration: dur, easing });
   }
 
-  // ─── Подсветка цепочки + коннектор ──────────────────────────────────────────
-
-  private refreshChainVisual(): void {
-    const chainSet = new Set(this.chain?.cells ?? []);
-    for (let i = 0; i < this.cellEls.length; i++) {
-      this.cellEls[i]!.classList.toggle('chain', chainSet.has(i));
-    }
-    for (const [idx, tile] of this.tileByIndex) {
-      const glow = this.getGlow(tile);
-      if (glow) glow.style.opacity = chainSet.has(idx) ? '0.5' : '0';
-    }
-    const pts = (this.chain?.cells ?? [])
-      .map((idx) => { const c = this.cellCenter(idx); return `${c.x},${c.y}`; })
-      .join(' ');
-    this.connectorLine.setAttribute('points', pts);
+  private delay(ms: number): Promise<void> {
+    return new Promise((r) => window.setTimeout(r, ms));
   }
 
-  private clearChainVisual(): void {
-    for (const cell of this.cellEls) cell.classList.remove('chain');
-    for (const tile of this.tileByIndex.values()) {
-      const g = this.getGlow(tile);
-      if (g) g.style.opacity = '0';
-    }
-    this.connectorLine.setAttribute('points', '');
+  // ─── Подсветка выбора ───────────────────────────────────────────────────────
+
+  private setSelected(idx: number, on: boolean): void {
+    const cell = this.cellEls[idx];
+    if (cell) cell.classList.toggle('sel', on);
   }
 
-  private clearChain(): void {
-    this.chain = null;
-    this.clearChainVisual();
+  private clearSelection(): void {
+    for (const cell of this.cellEls) cell.classList.remove('sel');
   }
 
   /** Плавающий «+$N» в точке сбора. */
@@ -343,12 +409,13 @@ export class BoardView {
 
   /** Внешний триггер rebuild — после действий dev-панели и т.п. */
   refillAndRebuild(): void {
-    this.rebuildTiles();
+    this.settleInitial();
   }
 
   destroy(): void {
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     for (const t of this.tileByIndex.values()) t.remove();
     this.tileByIndex.clear();
   }

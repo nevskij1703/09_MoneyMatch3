@@ -2,7 +2,7 @@
 // При load() читает schemaVersion, прогоняет миграции каскадно, мёрджит с дефолтами.
 // См. docs/SAVES.md.
 
-import type { SaveState, SaveData, FieldState } from '../types';
+import type { SaveState, SaveData, FieldState, SpecialKind } from '../types';
 import type { BoosterId } from './boosters';
 import { getCurrentSchemaVersion, runMigrations } from './migrations';
 import { balance } from '../config/balance';
@@ -26,7 +26,7 @@ export function DEFAULT_DATA(): SaveData {
     investmentMultiplier: balance.economy.investmentMultiplier,
     boosters: defaultBoosters(),
     totalCollected: 0,
-    bestChain: 0,
+    bestCombo: 0,
     settings: { sound: true, vibration: true },
     lastActiveTs: 0,
   };
@@ -72,6 +72,17 @@ function isValidBoard(b: any): b is FieldState {
   );
 }
 
+/** Привести board.special к валидному массиву длины cells (мусор/отсутствие → null). */
+function normalizeSpecial(board: FieldState): void {
+  const src: any[] = Array.isArray(board.special) ? board.special : [];
+  const out: (SpecialKind | null)[] = [];
+  for (let i = 0; i < board.cells.length; i++) {
+    const v = src[i];
+    out.push(v === 'bomb' || v === 'color' ? v : null);
+  }
+  board.special = out;
+}
+
 function mergeBoosters(incoming: any): Record<BoosterId, number> {
   const out = defaultBoosters();
   if (incoming && typeof incoming === 'object') {
@@ -99,6 +110,7 @@ function mergeDefaults(state: any): SaveState {
   const incomingBoard = isValidBoard(incoming.board) ? incoming.board : null;
   const board = (incomingBoard && incomingBoard.cols === balance.board.cols && incomingBoard.rows === balance.board.rows)
     ? incomingBoard : d0.data.board;
+  normalizeSpecial(board);
 
   const data: SaveData = {
     balance: num(incoming.balance, d0.data.balance),
@@ -107,7 +119,7 @@ function mergeDefaults(state: any): SaveState {
     investmentMultiplier: num(incoming.investmentMultiplier, d0.data.investmentMultiplier, 0.0001),
     boosters: mergeBoosters(incoming.boosters),
     totalCollected: num(incoming.totalCollected, 0),
-    bestChain: Math.floor(num(incoming.bestChain, 0)),
+    bestCombo: Math.floor(num(incoming.bestCombo, 0)),
     settings: { ...d0.data.settings, ...(incoming?.settings ?? {}) },
     lastActiveTs: num(incoming.lastActiveTs, 0),
   };

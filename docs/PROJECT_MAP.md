@@ -2,11 +2,12 @@
 
 Назначение: быстрый поиск нужного модуля без чтения всего кода.
 
-**Игра:** f2p match-3 в варианте «соединение цепочки». Игрок ведёт пальцем по цепочке
-СОСЕДНИХ одинаковых денежных плиток (длина ≥ `minChain`) — на отпускании они собираются в
-**Баланс**; затем гравитация: уцелевшие плитки падают вниз, сверху досыпаются новые
-БЕСПЛАТНО (тех же тиров). Сверху — заглушка Уоррена Баффета. Снизу — 4 бустера (заглушки) +
-тулбар-вкладки (заглушки).
+**Игра:** f2p **классический match-3**. Игрок **свайпает** — меняет местами две ортогонально
+соседние денежные плитки; линии ≥ `minLine` (=3) и квадраты 2×2 одного тира авто-схлопываются
+в **Баланс**; спецматчи рождают спецтайлы (2×2 → 💣 Бомба 3×3, линия-5 → 🧲 Магнит = весь тир);
+затем гравитация: уцелевшие плитки падают вниз, сверху досыпаются новые БЕСПЛАТНО — каскадами,
+пока есть матчи. Свап без матча откатывается. Сверху — заглушка Уоррена Баффета. Снизу —
+4 инвентарных бустера (заглушки) + тулбар-вкладки (заглушки).
 
 > Проект отделён от `08_MergeMoney` (общий каркас Vite/TS/DOM, координаты 384×844), но это
 > **самостоятельный** проект со своей кор-механикой, сейвом (`mmatch_save`) и документацией.
@@ -15,12 +16,12 @@
 
 | Что меняем | Файл |
 |---|---|
-| Любая цифра баланса (тиры, длина цепочки, ценность сбора, бустеры) | [src/config/balance.ts](../src/config/balance.ts) |
-| Кор-логика match-3 (цепочка, гравитация, досыпка, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
-| Ценность сбора цепочки → Баланс | [src/core/economy.ts](../src/core/economy.ts) |
+| Любая цифра баланса (тиры, minLine, спецтайлы, ценность сбора, бустеры) | [src/config/balance.ts](../src/config/balance.ts) |
+| Кор-логика match-3 (свап, поиск матчей, спецтайлы, каскад, гравитация, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
+| Ценность схлопа (каскад-комбо) → Баланс | [src/core/economy.ts](../src/core/economy.ts) |
 | Внутренняя стоимость тира (2^t) + формат денег | [src/core/money.ts](../src/core/money.ts) |
 | Хелперы поля (idx↔xy, makeBoard, isValidTier) | [src/core/board.ts](../src/core/board.ts) |
-| Поле — ввод цепочки, сбор, анимация гравитации/досыпки | [src/ui/dom/boardView.ts](../src/ui/dom/boardView.ts) |
+| Поле — свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка | [src/ui/dom/boardView.ts](../src/ui/dom/boardView.ts) |
 | VFX сбора (вспышка / ударная волна / искры) | [src/ui/dom/match3Fx.ts](../src/ui/dom/match3Fx.ts) |
 | HUD: Баланс + 💎 + лого MONEY MATCH | [src/ui/dom/hudView.ts](../src/ui/dom/hudView.ts) |
 | Баффет сверху (заглушка + реакции) | [src/ui/dom/buffettView.ts](../src/ui/dom/buffettView.ts) |
@@ -39,19 +40,20 @@ src/
 │                            new GameApp(#stage) → (DEV) devPanel
 ├── styles.css               Глобальные стили: #stage FIT, поле, баланс-бар, цепочка-коннектор,
 │                            бустеры, зона Баффета, FX, попы
-├── types.ts                 SaveData (balance/diamonds/board/investmentMultiplier/boosters/…), FieldState, Tier
+├── types.ts                 SaveData (balance/diamonds/board/investmentMultiplier/boosters/…), FieldState (+special), Tier, SpecialKind
 │
 ├── app/GameApp.ts           Оркестратор: сборка вью, onCollected→economy.addCollected, заглушки
 │
 ├── config/
-│   └── balance.ts           ЕДИНЫЙ источник баланса (board, tierCount, match.{minChain,diagonal,
-│                            comboStep,baseTileValue}, economy, boosters×4)
+│   └── balance.ts           ЕДИНЫЙ источник баланса (board, tierCount, match.{minLine,colorLineLen,
+│                            bombRadius,comboStep,baseTileValue}, economy, boosters×4)
 │
 ├── core/                    ЛОГИКА (pure, без DOM)
-│   ├── board.ts             isValidTier, idxToXY/xyToIdx, makeBoard
-│   ├── match3.ts            neighbors, canExtendChain(+backtrack), collectChain,
-│   │                        applyGravityAndRefill, hasAnyChain, makeMatch3Board
-│   ├── economy.ts           tileCollectValue, chainComboMultiplier, chainValue, addCollected
+│   ├── board.ts             isValidTier, idxToXY/xyToIdx, getSpecial, makeBoard
+│   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches, activateSpecial,
+│   │                        expandClearWithSpecials, applyClear/resolveStep, applyGravityAndRefill,
+│   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board
+│   ├── economy.ts           tileCollectValue, cascadeComboMultiplier, clearValue, addCollected
 │   ├── money.ts             tierValue=2^t, formatMoney, getTierStyle
 │   ├── boosters.ts          BoosterId (shuffle/hammer/lightning/magnet) + shuffleBoard
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
@@ -63,7 +65,7 @@ src/
     ├── dom/                 DOM-вью (координаты 384×844)
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
     │   ├── tierArt.ts       makeTierIcon (PNG T1..T28 + fallback)
-    │   ├── boardView.ts     Стол + 6×6: ввод цепочки, подсветка+SVG-линия, сбор, гравитация
+    │   ├── boardView.ts     Стол + 6×6: свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
     │   ├── hudView.ts       Баланс-плашка + 💎-пилл + лого
     │   ├── buffettView.ts   Зона Баффета (заглушка) + падающие деньги + popReaction
@@ -85,12 +87,16 @@ src/
 
 ## Потоки данных
 
-**Сбор цепочки (drag по полю):**
-1. [boardView.ts](../src/ui/dom/boardView.ts) `pointerdown` стартует цепочку, `pointermove` —
-   `canExtendChain`/backtrack (подсветка + SVG-линия), `pointerup` при длине ≥ `minChain` → сбор.
-2. `collectChain` обнуляет клетки → `applyGravityAndRefill` досыпает (логика СРАЗУ, поле консистентно).
-3. `onCollected(tiers)` → [GameApp](../src/app/GameApp.ts) `economy.addCollected` (Баланс растёт),
-   HUD refresh + поп «+$N», реакция Баффета на комбо (≥4).
-4. Анимация: pop собранных + падение уцелевших + досыпка сверху (WAAPI). Сейв.
+**Свайп-обмен (свап по полю):**
+1. [boardView.ts](../src/ui/dom/boardView.ts) `pointerdown` запоминает клетку, `pointermove` за
+   порогом определяет соседа → `trySwap(a,b)`. Спецтайл → применение на месте; иначе `swapCells`
+   + проверка `hasMatchAny` (нет матча → откат назад).
+2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: обнуление, спавн спецтайлов,
+   `applyGravityAndRefill`) пока есть матчи — `comboIndex` растёт. Логика СРАЗУ, поле консистентно.
+3. На каждом шаге `onCollected(tiers, comboIndex, spawnedSpecial)` → [GameApp](../src/app/GameApp.ts)
+   `economy.addCollected` (Баланс растёт), HUD refresh + поп «+$N», реакция Баффета (`comboIndex≥2`
+   или спецтайл).
+4. Анимация шага: pop схлопнутых + морф спецтайлов + падение уцелевших + досыпка (WAAPI). По
+   оседании — анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
 
 **Тап по бустеру / вкладке:** → `stubModal` (заглушки этой итерации).
