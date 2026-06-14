@@ -231,6 +231,41 @@ export interface CascadeStep {
   falls: { from: number; to: number }[];
   /** Новые плитки сверху. */
   refills: { idx: number; tier: Tier }[];
+  /** Число различных натуральных матч-групп в этом шаге (для комбо; спецвзрывы не считаются). */
+  groups: number;
+}
+
+/**
+ * Число различных матч-групп в наборе клеток — связные компоненты по 4-смежности
+ * с ОДИНАКОВЫМ тиром. Две линии разных тиров (даже смежные) = 2 группы; L/+ одного
+ * тира = 1 группа. Считается ДО обнуления (поле ещё содержит тиры).
+ */
+export function countMatchGroups(field: FieldState, cleared: Set<number>): number {
+  const { cols, rows } = field;
+  const seen = new Set<number>();
+  let groups = 0;
+  for (const start of cleared) {
+    if (seen.has(start)) continue;
+    const tier = field.cells[start];
+    groups++;
+    const stack = [start];
+    seen.add(start);
+    while (stack.length) {
+      const i = stack.pop() as number;
+      const { x, y } = idxToXY(i, cols);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        const ni = xyToIdx(nx, ny, cols);
+        if (!seen.has(ni) && cleared.has(ni) && field.cells[ni] === tier) {
+          seen.add(ni);
+          stack.push(ni);
+        }
+      }
+    }
+  }
+  return groups;
 }
 
 /**
@@ -262,7 +297,7 @@ export function applyClear(
   for (const s of spawns) { field.cells[s.idx] = s.tier; sp[s.idx] = s.kind; }
 
   const g = applyGravityAndRefill(field, tierCount, rng);
-  return { cleared, clearedTiers, spawns, falls: g.falls, refills: g.spawns };
+  return { cleared, clearedTiers, spawns, falls: g.falls, refills: g.spawns, groups: 0 };
 }
 
 /**
@@ -278,7 +313,10 @@ export function resolveStep(
 ): CascadeStep | null {
   const m = findMatches(field, moved);
   if (m.cleared.size === 0 && m.spawns.length === 0) return null;
-  return applyClear(field, m.cleared, m.spawns, tierCount, rng);
+  const groups = countMatchGroups(field, m.cleared); // считаем ДО обнуления и спец-расширения
+  const step = applyClear(field, m.cleared, m.spawns, tierCount, rng);
+  step.groups = groups;
+  return step;
 }
 
 // ─── Валидность хода / дедлок ───────────────────────────────────────────────────

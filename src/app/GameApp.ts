@@ -6,10 +6,12 @@
 // не нужна). Сохраняем при сборе и на visibility/pagehide.
 
 import { getData, save, update } from '../core/storage';
-import { addCollected } from '../core/economy';
+import { commitMove, comboTotal, tileCollectValue } from '../core/economy';
+import { formatMoney } from '../core/money';
 import type { Tier } from '../types';
 import type { BoosterId } from '../core/boosters';
 import { balance } from '../config/balance';
+import { el } from '../ui/dom/dom';
 import { HudView } from '../ui/dom/hudView';
 import { BuffettView } from '../ui/dom/buffettView';
 import { BoardView } from '../ui/dom/boardView';
@@ -25,6 +27,8 @@ export class GameApp {
   private board!: BoardView;
   private actionBar!: ActionBarView;
   private comboEl: HTMLDivElement | null = null;
+  private moveBaseSum = 0; // накопленная база денег за текущий ход (до комбо-бонуса)
+  private moveCombo = 0;   // накопленный уровень комбо за ход (число натуральных матч-групп)
 
   constructor(private stage: HTMLElement) {
     this.layout();
@@ -34,7 +38,8 @@ export class GameApp {
     this.buffett = new BuffettView(stage);
 
     this.board = new BoardView(stage, getData().board, {
-      onCollected: (tiers, comboLevel, spawnedSpecial) => this.onCollected(tiers, comboLevel, spawnedSpecial),
+      onCascadeStep: (tiers, groups) => this.onCascadeStep(tiers, groups),
+      onMoveEnd: () => this.onMoveEnd(),
       onPersist: () => save(),
     });
 
@@ -64,40 +69,85 @@ export class GameApp {
   };
   private onPageHide = (): void => { save(); };
 
-  /** Шаг каскада схлопнут: начислить в Баланс, обновить HUD, показать комбо, реакция Баффета. */
-  private onCollected(tiers: Tier[], comboLevel: number, spawnedSpecial: boolean): number {
-    let gained = 0;
-    update((d) => { gained = addCollected(d, tiers, comboLevel); });
-    this.hud.refresh();
-    this.hud.bumpBalance();
-    this.actionBar.refresh();
-    if (comboLevel >= 1) this.showCombo(comboLevel);
-    if (comboLevel >= 1 || spawnedSpecial) this.buffett.popReaction();
-    save();
-    return gained;
+  /** Шаг каскада: копим базовую сумму и уровень комбо, обновляем баннер над полем. */
+  private onCascadeStep(tiers: Tier[], naturalGroups: number): void {
+    const mult = getData().investmentMultiplier;
+    for (const t of tiers) this.moveBaseSum += tileCollectValue(t, mult);
+    this.moveCombo += naturalGroups;
+    if (this.moveCombo >= 1) this.updateCombo(this.moveCombo, comboTotal(this.moveBaseSum, this.moveCombo));
   }
 
-  /** Крупный баннер «Комбо ×N» над полем (pop + всплытие + растворение). level ≥ 1. */
-  private showCombo(level: number): void {
-    if (this.comboEl) this.comboEl.remove();
-    const elc = document.createElement('div');
-    elc.className = 'combo-banner';
-    elc.textContent = level === 1 ? 'Комбо' : `Комбо ×${level}`;
-    elc.style.fontSize = `${42 + Math.min(level, 6) * 3}px`;
-    if (level >= 5) elc.style.color = '#ff5252';
-    else if (level >= 3) elc.style.color = '#ff9f1c';
-    this.stage.appendChild(elc);
-    this.comboEl = elc;
-    const anim = elc.animate(
-      [
-        { transform: 'translate(-50%,0) scale(0.5)', opacity: 0 },
-        { transform: 'translate(-50%,0) scale(1.18)', opacity: 1, offset: 0.25 },
-        { transform: 'translate(-50%,0) scale(1)', opacity: 1, offset: 0.62 },
-        { transform: 'translate(-50%,-34px) scale(1.05)', opacity: 0 },
-      ],
-      { duration: 1000, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'forwards' },
+  /** Конец хода (поле перестало матчиться): зачислить накопленное в Баланс с полётом денег. */
+  private onMoveEnd(): void {
+    const baseSum = this.moveBaseSum;
+    const combo = this.moveCombo;
+    this.moveBaseSum = 0;
+    this.moveCombo = 0;
+    if (baseSum <= 0) { this.clearCombo(); return; } // ход без матчей (откат) — баннера нет
+
+    let gained = 0;
+    update((d) => { gained = commitMove(d, baseSum, combo); });
+    if (combo >= 2) this.buffett.popReaction();
+    this.flyMoneyToBalance(gained); // на прилёте обновит HUD-баланс
+    save();
+  }
+
+  /** Создать/обновить баннер «Комбо ×N» + сумму $ под ним (нарастает по ходу). level ≥ 1. */
+  private updateCombo(level: number, total: number): void {
+    if (!this.comboEl) {
+      const root = document.createElement('div');
+      root.className = 'combo-banner';
+      el('div', { cls: 'combo-title', parent: root });
+      el('div', { cls: 'combo-money', parent: root });
+      this.stage.appendChild(root);
+      this.comboEl = root;
+    }
+    const title = this.comboEl.querySelector('.combo-title') as HTMLDivElement;
+    const money = this.comboEl.querySelector('.combo-money') as HTMLDivElement;
+    title.textContent = `Комбо ×${level}`;
+    title.style.fontSize = `${40 + Math.min(level, 8) * 3}px`;
+    title.style.color = level >= 5 ? '#ff5252' : level >= 3 ? '#ff9f1c' : '#ffd23f';
+    money.textContent = `$${formatMoney(total)}`;
+    this.comboEl.animate(
+      [{ transform: 'translate(-50%,0) scale(1.14)' }, { transform: 'translate(-50%,0) scale(1)' }],
+      { duration: 220, easing: 'cubic-bezier(0.34,1.56,0.64,1)' },
     );
-    anim.onfinish = () => { elc.remove(); if (this.comboEl === elc) this.comboEl = null; };
+  }
+
+  private clearCombo(): void {
+    if (this.comboEl) { this.comboEl.remove(); this.comboEl = null; }
+  }
+
+  /** Деньги «улетают» из баннера комбо в плашку Баланса; на прилёте Баланс обновляется. */
+  private flyMoneyToBalance(amount: number): void {
+    const banner = this.comboEl;
+    this.comboEl = null;
+    if (banner) {
+      const a = banner.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' });
+      a.onfinish = () => banner.remove();
+    }
+    // Старт — над полем (где баннер), цель — центр баланс-плашки (≈192,127) в дизайн-координатах.
+    const startX = 192, startY = 345;
+    const dx = 192 - startX, dy = 127 - startY;
+    const fly = el('div', {
+      cls: 'combo-fly',
+      text: `+$${formatMoney(amount)}`,
+      style: `left:${startX}px;top:${startY}px;`,
+      parent: this.stage,
+    });
+    const anim = fly.animate(
+      [
+        { transform: 'translate(-50%,-50%) scale(1.1)', opacity: 1, offset: 0 },
+        { transform: 'translate(-50%,-50%) scale(1.1)', opacity: 1, offset: 0.15 },
+        { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(0.55)`, opacity: 0.2 },
+      ],
+      { duration: 600, easing: 'cubic-bezier(0.5,0,0.7,1)', fill: 'forwards' },
+    );
+    anim.onfinish = () => {
+      fly.remove();
+      this.hud.refresh();
+      this.hud.bumpBalance();
+    };
   }
 
   private onBooster(id: BoosterId): void {

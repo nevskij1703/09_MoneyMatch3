@@ -111,7 +111,7 @@ body {
   transition: opacity 0.12s linear;
 }
 
-/* ─────────────────────── Стол и игровое поле 5×5 ────────────────────────── */
+/* ─────────────────────── Стол и игровое поле 6×6 ────────────────────────── */
 /* Декоративные слои стола (MergeDesk): кромка, светлая плита, внутренняя зона. */
 .desk-edge {
   position: absolute;
@@ -731,24 +731,50 @@ body {
     1px -1px 0 #3a2a00, -1px 1px 0 #3a2a00;
 }
 
-/* Баннер комбо над полем (создаётся динамически в GameApp.showCombo, анимируется WAAPI). */
+/* Баннер комбо над полем: контейнер «Комбо ×N» (combo-title) + накопленная сумма $
+   (combo-money). Создаётся/обновляется в GameApp.updateCombo, анимируется WAAPI. */
 .combo-banner {
   position: absolute;
   left: 50%;
-  top: 318px;
+  top: 300px;
   transform: translate(-50%, 0);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 60;
+}
+.combo-banner .combo-title {
   font-family: 'Fredoka', 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 46px;
   color: #ffd23f;
   letter-spacing: 1px;
-  white-space: nowrap;
+  line-height: 1.05;
   text-shadow:
     0 0 4px #3a2a00,
     2px 2px 0 #3a2a00, -2px -2px 0 #3a2a00, 2px -2px 0 #3a2a00, -2px 2px 0 #3a2a00,
     0 6px 12px rgba(0, 0, 0, 0.45);
+}
+/* Накопленная сумма под комбо и «летящие» в баланс деньги — общий стиль. */
+.combo-banner .combo-money,
+.combo-fly {
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 700;
+  color: #9fe870;
+  text-shadow: 0 0 3px #1a3a00, 1px 1px 0 #1a3a00, -1px -1px 0 #1a3a00,
+    1px -1px 0 #1a3a00, -1px 1px 0 #1a3a00, 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+.combo-banner .combo-money {
+  font-size: 26px;
+  margin-top: 2px;
+}
+.combo-fly {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  white-space: nowrap;
   pointer-events: none;
-  z-index: 60;
+  z-index: 61;
 }
 
 /* ═══════════════════ MoneyMatch3: баланс · цепочка · бустеры · Баффет ═══════════════════ */

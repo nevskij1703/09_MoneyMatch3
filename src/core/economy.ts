@@ -1,12 +1,14 @@
 // Экономика MoneyMatch3 — ценность схлопнутых плиток и зачисление в Баланс.
-// Pure-функции (кроме addCollected, которая мутирует переданный SaveData).
+// Pure-функции (кроме commitMove, которая мутирует переданный SaveData).
 //
 // Модель денег (классический match-3 с каскадами и комбо):
 //   ценность плитки t = tierValue(t) × baseTileValue × investmentMultiplier
-//   ценность шага     = Σ плиток × комбо-множитель(comboLevel)
-//   комбо-множитель   = comboLevel≤0 ? 1 : 1 + comboBaseBonus + (comboLevel−1)·comboBonusStep
-//                       (Комбо +5%, ×2 +6%, ×3 +7%, …; считаются только натуральные матчи,
-//                        взрывы спецтайлов комбо не повышают)
+//   за ход копится baseSum (Σ ценность ВСЕХ схлопнутых плиток) и уровень комбо
+//   (число натуральных матч-групп за ход; спецвзрывы не считаются, старт ×1).
+//   Итог хода = round(baseSum × комбо-множитель(ФИНАЛЬНЫЙ уровень))   — НЕ аддитивно по шагам:
+//   за ×1 и ×2 даётся не 5%+6%, а 6% (бонус финального уровня на всю сумму).
+//   комбо-множитель = level≤0 ? 1 : 1 + comboBaseBonus + (level−1)·comboBonusStep  (×1 +5%, ×2 +6%, …)
+//   Деньги зачисляются в Баланс ОДИН раз в конце хода (когда поле перестало матчиться).
 // investmentMultiplier поднимают будущие инвестиции (трата Баланса). Старт = 1.
 
 import type { SaveData, Tier } from '../types';
@@ -27,19 +29,18 @@ export function comboMoneyMultiplier(comboLevel: number): number {
   return 1 + balance.match.comboBaseBonus + (comboLevel - 1) * balance.match.comboBonusStep;
 }
 
-/** Полная ценность одного шага каскада с учётом комбо (округлена до целого). */
-export function clearValue(tiers: Tier[], comboLevel: number, investmentMultiplier: number): number {
-  let sum = 0;
-  for (const t of tiers) sum += tileCollectValue(t, investmentMultiplier);
-  return Math.round(sum * comboMoneyMultiplier(comboLevel));
+/** Итог хода: накопленная база × множитель ФИНАЛЬНОГО уровня комбо (округлён до целого). */
+export function comboTotal(baseSum: number, comboLevel: number): number {
+  return Math.round(baseSum * comboMoneyMultiplier(comboLevel));
 }
 
 /**
- * Применить схлоп одного шага каскада к сейву: растит balance и totalCollected,
- * обновляет bestCombo (макс. достигнутый уровень комбо). Возвращает сумму (для попа «+$N»).
+ * Зафиксировать ход в сейве (когда поле перестало матчиться): начислить накопленную
+ * сумму с бонусом финального уровня комбо в Баланс. Растит balance/totalCollected,
+ * обновляет bestCombo. Возвращает начисление (для анимации полёта в баланс).
  */
-export function addCollected(d: SaveData, tiers: Tier[], comboLevel: number): number {
-  const gained = clearValue(tiers, comboLevel, d.investmentMultiplier);
+export function commitMove(d: SaveData, baseSum: number, comboLevel: number): number {
+  const gained = comboTotal(baseSum, comboLevel);
   d.balance += gained;
   d.totalCollected += gained;
   if (comboLevel > d.bestCombo) d.bestCombo = comboLevel;

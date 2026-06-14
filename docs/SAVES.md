@@ -12,9 +12,9 @@
     "balance": 0,                 // главная валюта (собранные деньги)
     "diamonds": 50,               // премиум 💎
     "board": {                    // поле match-3
-      "cols": 5, "rows": 5,
-      "cells":   [ /* 25 × (Tier|null) */ ],
-      "special": [ /* 25 × ('bomb'|'color'|null) — спецтайлы на поле */ ]
+      "cols": 6, "rows": 6,
+      "cells":   [ /* 36 × (Tier|null) */ ],
+      "special": [ /* 36 × ('bomb'|'color'|null) — спецтайлы на поле */ ]
     },
     "investmentMultiplier": 1,    // множитель ценности сбора (будущие инвестиции)
     "boosters": { "shuffle": 3, "hammer": 3, "lightning": 3, "magnet": 3 },

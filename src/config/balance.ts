@@ -79,8 +79,8 @@ export const balance: Balance = {
   // Старт — 4 типа объектов (арт T1..T4). Прогрессия добавит тиры позже.
   tierCount: 4,
   board: {
-    cols: 5,
-    rows: 5,
+    cols: 6,
+    rows: 6,
   },
   match: {
     minLine: 3,        // 3 в ряд по верт./гориз. схлопываются

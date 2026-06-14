@@ -42,7 +42,7 @@ src/
 │                            бустеры, зона Баффета, FX, попы
 ├── types.ts                 SaveData (balance/diamonds/board/investmentMultiplier/boosters/…), FieldState (+special), Tier, SpecialKind
 │
-├── app/GameApp.ts           Оркестратор: сборка вью, onCollected→economy.addCollected, заглушки
+├── app/GameApp.ts           Оркестратор: сборка вью, комбо-аккумулятор+баннер, onMoveEnd→economy.commitMove
 │
 ├── config/
 │   └── balance.ts           ЕДИНЫЙ источник баланса (board, tierCount, match.{minLine,colorLineLen,
@@ -53,7 +53,7 @@ src/
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches, activateSpecial,
 │   │                        expandClearWithSpecials, applyClear/resolveStep, applyGravityAndRefill,
 │   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board
-│   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, clearValue, addCollected
+│   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
 │   ├── money.ts             tierValue=2^t, formatMoney, getTierStyle
 │   ├── boosters.ts          BoosterId (shuffle/hammer/lightning/magnet) + shuffleBoard
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
@@ -65,7 +65,7 @@ src/
     ├── dom/                 DOM-вью (координаты 384×844)
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
     │   ├── tierArt.ts       makeTierIcon (PNG T1..T28 + fallback)
-    │   ├── boardView.ts     Стол + 5×5: свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка
+    │   ├── boardView.ts     Стол + 6×6: свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
     │   ├── hudView.ts       Баланс-плашка + 💎-пилл + лого
     │   ├── buffettView.ts   Зона Баффета (заглушка) + падающие деньги + popReaction
@@ -92,11 +92,14 @@ src/
    порогом определяет соседа → `trySwap(a,b)`. Спецтайл → применение на месте; иначе `swapCells`
    + проверка `hasMatchAny` (нет матча → откат назад).
 2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: обнуление, спавн спецтайлов,
-   `applyGravityAndRefill`) пока есть матчи — уровень комбо растёт. Логика СРАЗУ, поле консистентно.
-3. На каждом шаге `onCollected(tiers, comboLevel, spawnedSpecial)` → [GameApp](../src/app/GameApp.ts)
-   `economy.addCollected` (Баланс растёт), HUD refresh + поп «+$N», баннер «Комбо ×N» (`showCombo`) и
-   реакция Баффета (комбо ≥ 1 или спецтайл). Комбо считает только натуральные матч-шаги.
-4. Анимация шага: pop схлопнутых + морф спецтайлов + падение уцелевших + досыпка (WAAPI). По
-   оседании — анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
+   `applyGravityAndRefill`) пока есть матчи. `step.groups` = число натуральных матч-групп шага
+   (`countMatchGroups`). Логика СРАЗУ, поле консистентно.
+3. На каждом шаге `onCascadeStep(tiers, groups)` → [GameApp](../src/app/GameApp.ts) копит `baseSum`
+   (ценность плиток) + уровень комбо (Σ групп; спецвзрывы = 0), обновляет баннер «Комбо ×N» +
+   накопленную сумму $ (`updateCombo`).
+4. Анимация шага: pop схлопнутых + морф спецтайлов + падение уцелевших + досыпка (WAAPI).
+5. В конце хода `onMoveEnd()` → `economy.commitMove` (Баланс растёт ОДИН раз), деньги улетают в
+   плашку (`flyMoneyToBalance` → HUD refresh + bump), реакция Баффета (комбо ≥ 2). Анти-дедлок
+   (`hasAnyValidMove` → shuffle). Сейв.
 
 **Тап по бустеру / вкладке:** → `stubModal` (заглушки этой итерации).
