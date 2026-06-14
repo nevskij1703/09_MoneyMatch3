@@ -2,7 +2,7 @@
 
 import type { BoosterId } from './core/boosters';
 
-/** Тип денежного объекта на поле (1..tierCount). Старт — T1..T5 (5 типов). */
+/** Тип денежного объекта на поле (1..tierCount). Старт — T1..T4 (4 типа). */
 export type Tier = number;
 
 /**

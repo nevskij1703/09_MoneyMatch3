@@ -1,4 +1,4 @@
-// Поле классического match-3: декоративный стол + сетка 6×6.
+// Поле классического match-3: декоративный стол + сетка 5×5.
 //
 // Ввод: игрок ЗАЖИМАЕТ плитку и СВАЙПАЕТ к ортогональному соседу → они меняются
 // местами. Если обмен создал линию 3+ или квадрат 2×2 — поле разрешается каскадами
@@ -31,7 +31,7 @@ export interface BoardViewCallbacks {
 const PANEL_LEFT = 13;
 const PANEL_TOP = 299;
 const PANEL_W = 360;
-const PANEL_H = 345;
+const PANEL_H = 360; // 5×5 → квадратные ячейки 72×72 (ширина поля сохранена ≈360)
 
 const EASE_OUT = 'cubic-bezier(0.22,0.61,0.36,1)';
 const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
@@ -61,9 +61,9 @@ export class BoardView {
     this.iconSize = Math.min(this.cellW, this.cellH) - 2;
 
     // Декоративный стол (3 слоя). Сетка лежит поверх.
-    el('div', { cls: 'desk-edge', style: 'left:6px;top:293px;width:372px;height:361px;', parent: stage });
-    el('div', { cls: 'desk-top', style: 'left:6px;top:293px;width:372px;height:356px;', parent: stage });
-    el('div', { cls: 'desk-inner', style: 'left:12px;top:298px;width:362px;height:347px;', parent: stage });
+    el('div', { cls: 'desk-edge', style: 'left:6px;top:293px;width:372px;height:371px;', parent: stage });
+    el('div', { cls: 'desk-top', style: 'left:6px;top:293px;width:372px;height:367px;', parent: stage });
+    el('div', { cls: 'desk-inner', style: 'left:12px;top:298px;width:362px;height:362px;', parent: stage });
 
     this.panel = el('div', {
       cls: 'board-panel',

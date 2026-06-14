@@ -65,7 +65,7 @@ src/
     ├── dom/                 DOM-вью (координаты 384×844)
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
     │   ├── tierArt.ts       makeTierIcon (PNG T1..T28 + fallback)
-    │   ├── boardView.ts     Стол + 6×6: свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка
+    │   ├── boardView.ts     Стол + 5×5: свайп-ввод, каскад-анимация, спецтайлы, гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
     │   ├── hudView.ts       Баланс-плашка + 💎-пилл + лого
     │   ├── buffettView.ts   Зона Баффета (заглушка) + падающие деньги + popReaction
