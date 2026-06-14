@@ -1,0 +1,32 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Money Merge (main)" clip-path="url(#clip0_219_98)">
+<g id="Frame">
+<g id="btn-contracts">
+<g id="notificator">
+<g id="notificator-base" filter="url(#filter0_d_219_98)">
+<circle cx="12" cy="10" r="10" fill="url(#paint0_linear_219_98)"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<filter id="filter0_d_219_98" x="0" y="0" width="24" height="24" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="2"/>
+<feGaussianBlur stdDeviation="1"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_219_98"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_219_98" result="shape"/>
+</filter>
+<linearGradient id="paint0_linear_219_98" x1="12" y1="0" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FF5A4D"/>
+<stop offset="1" stop-color="#D62B1E"/>
+</linearGradient>
+<clipPath id="clip0_219_98">
+<rect width="384" height="844" fill="white" transform="translate(-70 -674)"/>
+</clipPath>
+</defs>
+</svg>

@@ -1,0 +1,903 @@
+/*
+  Merge Money — глобальные стили (редизайн по Figma-макету «Money Merge (main)»,
+  node 248:3910, файл RC-UI, июнь 2026).
+
+  Принцип: #stage — фиксированный холст 384×844 (= размер Figma-фрейма, все
+  координаты вью совпадают с макетом 1-в-1). main.ts масштабирует его
+  transform:scale под экран (FIT). Растровые ассеты — public/assets/
+  (tiers/T1..T28, chars/, ui/*.svg), шрифты — public/fonts/ (@font-face в
+  index.html: Nunito 700/800/900 latin+cyr, Fredoka 600/700 latin).
+
+  Палитра макета:
+    тёмно-синий панелей #051D3F · фон-градиент #002D69→#BEE2FF→#FFF
+    стол поля #E0CBAC/#FCF1DE/#F2E3CB · слот #FDF6E5
+    зелёная кнопка #77D92C→#3F9E13 (border #AAFF56, низ #347800)
+    income-пилл #3A8C26 · таймер #173670 · карточка #FCF9F1
+    тулбар #27598F→#112D52 · текст-акцент #14407D
+*/
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #002d69;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  font-family: 'Nunito', system-ui, sans-serif;
+}
+
+/* Фон за пределами #stage продолжает градиент макета. */
+#viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #002d69 0%, #002d69 13%, #bee2ff 39%, #ffffff 100%);
+}
+
+/* Дизайн-холст 384×844. transform-origin центр; масштаб ставит GameApp. */
+#stage {
+  position: relative;
+  width: 384px;
+  height: 844px;
+  background: linear-gradient(180deg, #002d69 0%, #002d69 12.98%, #bee2ff 38.94%, #ffffff 100%);
+  transform-origin: center center;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+/* Любой абсолютный слой внутри #stage. */
+.layer {
+  position: absolute;
+  color: #fff;
+}
+
+/* ─────────────────────── Tier-иконка (объект денег) ─────────────────────── */
+/*
+  Арт T1..T28 — PNG из Figma-сета «maney-icon». Каждый тир позиционируется
+  в своём боксе по per-tier инсетам (см. tierArt.ts TIER_INSETS) — 1-в-1 с
+  макетом. Для T>28 — fallback: круг + номер. Мягкая тень — как у плиток
+  на столе в макете.
+*/
+.tier {
+  position: relative;
+  flex: 0 0 auto;
+}
+.tier-art {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(178, 142, 65, 0.35));
+}
+.tier-circle {
+  position: absolute;
+  inset: 10%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tier-num {
+  color: #fff;
+  font-weight: 900;
+  line-height: 1;
+}
+
+/*
+  Золотой glow ПОВЕРХ иконки (подсветка выбранной/кандидатов merge).
+  alpha переключается инлайном (0 / 0.28 / 0.55). mix-blend-mode:screen ≈ ADD.
+*/
+.tier-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.95) 0%, rgba(255, 215, 0, 0.6) 45%, rgba(255, 215, 0, 0) 75%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s linear;
+}
+
+/* ─────────────────────── Стол и игровое поле 6×6 ────────────────────────── */
+/* Декоративные слои стола (MergeDesk): кромка, светлая плита, внутренняя зона. */
+.desk-edge {
+  position: absolute;
+  background: #e0cbac;
+  border-radius: 7px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25), 0 3px 4px rgba(38, 57, 82, 0.25);
+}
+.desk-top {
+  position: absolute;
+  background: #fcf1de;
+  border: 0.5px solid #ffffff;
+  border-radius: 7px;
+}
+.desk-inner {
+  position: absolute;
+  background: #f2e3cb;
+  border-radius: 5px;
+}
+
+/* Панель-сетка (input-зона) и слоты. */
+.board-panel {
+  position: absolute;
+}
+.board-cell {
+  position: absolute;
+  background: #fdf6e5;
+  border-radius: 5px;
+}
+.board-cell.primary {
+  background: #fff3c4;
+  box-shadow: inset 0 0 0 2px #ffd23f;
+}
+.board-tile {
+  position: absolute;
+  cursor: pointer;
+  will-change: transform, opacity;
+}
+/* iter 24: пикапы (алмаз/коллекционка) на поле — тап собирает, не мёржатся/двигаются. */
+.board-pickup {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 4;
+}
+.board-pickup .pickup-glyph {
+  font-size: 34px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  animation: pickup-pulse 1.1s ease-in-out infinite;
+}
+@keyframes pickup-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+.board-ghost {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ─────────────────────── Статус-бары (верх) ─────────────────────────────── */
+.statusbar {
+  position: absolute;
+  background: #051d3f;
+  border-radius: 7px;
+}
+.level-badge {
+  position: absolute;
+}
+.level-badge img {
+  position: absolute;
+  inset: 0 0 -2.5% 0;
+  width: 100%;
+  display: block;
+}
+.level-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: #fff;
+  padding-bottom: 3px;
+}
+.xp-bar {
+  position: absolute;
+  height: 10px;
+  border-radius: 5px;
+  background: #040b1a;
+}
+.xp-fill {
+  position: absolute;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #5fc8ff 0%, #2f8fd6 100%);
+}
+.xp-text {
+  position: absolute;
+  font-weight: 900;
+  font-size: 9px;
+  color: #cfe0f5;
+  white-space: nowrap;
+}
+.diamonds-value {
+  position: absolute;
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  color: #fff;
+}
+
+/* ─────────────────────── Логотип MONEY MERGE ────────────────────────────── */
+/*
+  CSS-реплика Figma-лого (3 слоя текста): задний слой — толстая тёмно-синяя
+  обводка, передний — белый «MONEY» / градиентный «MERGE» с жёсткой нижней
+  тенью. Fredoka Bold 32px. drop-shadow всего блока — из макета.
+*/
+.logo {
+  position: absolute;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 27px;
+  text-align: center;
+  filter: drop-shadow(0 1px 0.5px rgba(0, 0, 0, 0.5)) drop-shadow(0 3px 1.5px rgba(0, 0, 0, 0.25));
+  pointer-events: none;
+}
+.logo .row {
+  position: relative;
+  display: block;
+}
+.logo .row + .row {
+  margin-top: -2px;
+}
+.logo .back,
+.logo .front {
+  display: block;
+  letter-spacing: 0.5px;
+}
+.logo .back {
+  position: absolute;
+  inset: 0;
+  -webkit-text-stroke: 7px #16457f;
+  color: #16457f;
+}
+.logo .front {
+  position: relative;
+}
+.logo .money .front {
+  color: #ffffff;
+  text-shadow: 0 2px 0 #a2a2a2;
+}
+.logo .merge .front {
+  background: linear-gradient(180deg, #fff600 0%, #ee9b00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 2px 0 #c26700;
+}
+
+/* ─────────────────────── Карточки клиентов ──────────────────────────────── */
+.client-card {
+  position: absolute;
+  width: 118px;
+  height: 148px;
+  background: #fcf9f1;
+  border-radius: 12px;
+  box-shadow: 0 2px 0 #c3c3c3, 0 4px 2px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+/* Подсветка «тир на поле — можно подписать». */
+.client-card.eligible {
+  box-shadow: 0 2px 0 #3f9e13, 0 4px 6px rgba(63, 158, 19, 0.55), 0 0 0 2px #77d92c;
+}
+/* iter 24: клиенты в очереди (не передний) — заказ/таймер/выгода/✕ скрыты, карточка приглушена. */
+.client-card.queued {
+  opacity: 0.5;
+  filter: grayscale(0.45);
+  cursor: default;
+}
+.client-card.queued .order-bubble,
+.client-card.queued .client-timer,
+.client-card.queued .client-income,
+.client-card.queued .client-reject {
+  display: none !important;
+}
+.client-card .queue-label {
+  display: none;
+}
+.client-card.queued .queue-label {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  text-align: center;
+  font: 800 13px Nunito, system-ui, sans-serif;
+  color: #4a4a4a;
+}
+/* Ленивая генерация: клиент в очереди ещё НЕ определён (параметры не выбраны) —
+   серый силуэт без имени. Сильнее, чем grayscale у .queued. */
+.client-card.undetermined {
+  filter: grayscale(1) brightness(0.96);
+}
+.client-card.undetermined .client-name {
+  display: none;
+}
+.client-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 13px;
+  color: #3a4a63;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.char-frame {
+  position: absolute;
+  left: 1.69%;
+  right: 3.39%;
+  top: 16%;
+  bottom: 15.33%;
+  overflow: hidden;
+  border-radius: 0 0 8px 8px;
+}
+.char-wrap {
+  position: absolute;
+  left: -8.04%;
+  right: 12.5%;
+  top: -5.83%;
+  bottom: -31.07%;
+}
+.char-wrap img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* Пузырь заказа: bubble.svg + tier-иконка по центру. */
+.order-bubble {
+  position: absolute;
+  left: 80px;
+  top: 28px;
+  width: 36px;
+  height: 40px;
+  pointer-events: none;
+}
+.order-bubble > img {
+  position: absolute;
+  left: -1%;
+  top: 4%;
+  width: 102%;
+  display: block;
+}
+.order-tier {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.client-timer {
+  position: absolute;
+  left: 9px;
+  top: 111px;
+  width: 52px;
+  height: 12px;
+  background: #173670;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 9px;
+  color: #fff;
+  white-space: nowrap;
+}
+.client-income {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.client-income .cost {
+  font-size: 13px;
+  color: #171717;
+}
+.client-income .plus {
+  font-size: 10px;
+  color: #171717;
+}
+.client-income .payout {
+  font-size: 13px;
+  color: #469e3e;
+}
+.client-reject {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8e2d4;
+  border: 1px solid #c3bca9;
+  color: #8a8473;
+  font-weight: 900;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+}
+
+/* ─────────────────────── Низ: доход, резерв, кнопки ─────────────────────── */
+.income-pill {
+  position: absolute;
+  background: #3a8c26;
+  border-radius: 5px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  color: #fff;
+  font-weight: 900;
+  z-index: 3;
+}
+.income-pill .val {
+  font-size: 10px;
+}
+.income-pill .unit {
+  font-size: 8px;
+}
+
+/* Зелёная 3D-кнопка «БАНКОВСКИЙ РЕЗЕРВ» (btn-base из макета: низ + градиент). */
+.reserve-btn {
+  position: absolute;
+  cursor: pointer;
+  z-index: 2;
+}
+.reserve-btn .base {
+  position: absolute;
+  inset: 0;
+  background: #347800;
+  border: 1px solid #1f6221;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.reserve-btn .face {
+  position: absolute;
+  inset: 0 0 4px 0;
+  background: linear-gradient(180deg, #77d92c 0%, #3f9e13 100%);
+  border: 1px solid #aaff56;
+  border-radius: 10px;
+}
+/* Блик в левом верхнем углу (ellipse из макета). */
+.reserve-btn .face::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 2.5px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(50deg);
+}
+.reserve-btn .title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  text-align: center;
+  font-weight: 900;
+  font-size: 14px;
+  color: #fff;
+}
+.reserve-btn .counter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 32px;
+  height: 33px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+}
+.reserve-btn .amount {
+  font-weight: 900;
+  color: #fff;
+  white-space: nowrap;
+}
+.reserve-btn .amount .num {
+  font-size: 30px;
+}
+.reserve-btn .amount .suffix {
+  font-size: 20px;
+}
+.reserve-btn.disabled {
+  filter: grayscale(0.55) brightness(0.85);
+}
+/* Подпись-статус под кнопкой при недоступности (не из макета — функциональный хинт). */
+.reserve-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 8px;
+  color: #fff7d0;
+  pointer-events: none;
+}
+
+/* Белая квадратная кнопка (Сделки / Инвесты) на btn-square-white.svg. */
+.square-btn {
+  position: absolute;
+  width: 67px;
+  height: 66px;
+  cursor: pointer;
+  z-index: 2;
+}
+.square-btn > img.bg {
+  position: absolute;
+  inset: -1.5%;
+  width: 103%;
+  height: 103%;
+  display: block;
+}
+.square-btn .icon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1px;
+  height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  line-height: 1;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+}
+.square-btn .label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: #14407d;
+}
+
+/* Красный кружок-нотификатор (notif-badge.svg + цифра). */
+.notif {
+  position: absolute;
+  right: -7px;
+  top: -8px;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  z-index: 6;
+}
+.notif > img {
+  position: absolute;
+  inset: 0 -10% -20% -10%;
+  width: 120%;
+  height: 120%;
+  display: block;
+}
+.notif .n {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 13px;
+  color: #fff;
+}
+
+/* ─────────────────────── Нижний тулбар (5 вкладок) ──────────────────────── */
+.btm-toolbar {
+  position: absolute;
+  left: 0;
+  top: 759px;
+  width: 384px;
+  height: 85px;
+  background: linear-gradient(180deg, #27598f 0%, #112d52 34.1%);
+  border-radius: 9px 9px 0 0;
+  box-shadow: inset 0 1px 0 #5289bd;
+  z-index: 4;
+}
+.btm-toolbar .list {
+  position: absolute;
+  left: 1px;
+  top: 7px;
+  width: 381px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 3px;
+}
+.toolbar-btn {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.toolbar-btn.main {
+  width: 99px;
+  height: 78px;
+}
+.toolbar-btn > img.bg {
+  position: absolute;
+  left: -3%;
+  right: -3%;
+  top: -6%;
+  width: 106%;
+  height: 106%;
+  display: block;
+}
+.toolbar-btn.main > img.bg {
+  left: -2%;
+  top: -5.1%;
+  width: 104%;
+  height: 105%;
+}
+.toolbar-btn .icon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  line-height: 1;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+}
+.toolbar-btn.main .icon {
+  height: 50px;
+  font-size: 40px;
+}
+.toolbar-btn .label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  text-align: center;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: -0.2px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.toolbar-btn.main .label {
+  bottom: 11px;
+  font-size: 15px;
+}
+
+/* ─────────────────────── Merge VFX слои ─────────────────────────────────── */
+/* flash/shockwave/spark — radial-gradient div'ы, анимируются через WAAPI. */
+.fx {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+.fx-flash {
+  background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.9) 60%, rgba(255, 255, 255, 0) 100%);
+}
+.fx-shockwave {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, 0.35) 82%, rgba(255, 255, 255, 1) 94%, rgba(255, 255, 255, 0) 100%);
+}
+.fx-spark {
+  background: radial-gradient(circle, rgba(255, 244, 179, 1) 0%, rgba(255, 244, 179, 0.55) 50%, rgba(255, 244, 179, 0) 100%);
+}
+
+/* Плавающий текст-«поп» (+$N, LVL n!, нет клиента). */
+.pop {
+  position: absolute;
+  pointer-events: none;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  white-space: nowrap;
+  z-index: 1000;
+}
+
+/* Текст со «strokem» (тёмная обводка для попов поверх светлого поля). */
+.stroked-dark {
+  text-shadow: 0 0 3px #3a2a00, 1px 1px 0 #3a2a00, -1px -1px 0 #3a2a00,
+    1px -1px 0 #3a2a00, -1px 1px 0 #3a2a00;
+}
+
+/* ═══════════════════ MoneyMatch3: баланс · цепочка · бустеры · Баффет ═══════════════════ */
+
+/* Плашка Баланса (главная валюта). */
+.balance-bar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #0a6b2e 0%, #064a1f 100%);
+  border: 1px solid #19b34a;
+  border-radius: 12px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.balance-bar .bal-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.balance-bar .bal-value {
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+/* Подсветка клетки в активной цепочке + соединительная линия (SVG поверх плиток). */
+.board-cell.chain {
+  background: #fff3c4;
+  box-shadow: inset 0 0 0 2px #ffd23f;
+}
+.chain-connector {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 30;
+}
+.chain-line {
+  fill: none;
+  stroke: #ffd23f;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+/* Нижний ряд из 4 кнопок-бустеров (на btn-square-white.svg). */
+.booster-btn {
+  position: absolute;
+  cursor: pointer;
+  z-index: 2;
+}
+.booster-btn > img.bg {
+  position: absolute;
+  inset: -2%;
+  width: 104%;
+  height: 104%;
+  display: block;
+}
+.booster-btn .icon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  line-height: 1;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+}
+.booster-btn .label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 10px;
+  color: #14407d;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.booster-btn .booster-count {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #2e7d32;
+  border: 1.5px solid #fff;
+  color: #fff;
+  font-weight: 900;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+}
+
+/* Зона Баффета (заглушка): фигура «сидит на деньгах» + декоративные падающие деньги. */
+.buffett-zone {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 4px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.buffett-figwrap {
+  position: relative;
+  animation: buffett-bob 3.2s ease-in-out infinite;
+}
+.buffett-fig {
+  font-size: 60px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35));
+}
+.buffett-money {
+  font-size: 26px;
+  line-height: 1;
+  margin-top: -10px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+.buffett-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  opacity: 0;
+}
+@keyframes buffett-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.falling-coin {
+  position: absolute;
+  top: -28px;
+  font-size: 18px;
+  opacity: 0.85;
+  animation: coinfall linear infinite;
+  will-change: transform;
+}
+@keyframes coinfall {
+  0% { transform: translateY(-28px) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.9; }
+  88% { opacity: 0.9; }
+  100% { transform: translateY(168px) rotate(180deg); opacity: 0; }
+}
