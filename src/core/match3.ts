@@ -3,10 +3,14 @@
 // Механика: игрок свайпом меняет местами две ОРТОГОНАЛЬНО соседние плитки. Если
 // после обмена образовалась линия 3+ (верт./гориз.) или квадрат 2×2 — поле
 // разрешается каскадами: матчи схлопываются (деньги в Баланс), спецматчи рождают
-// спецтайлы (квадрат 2×2 → bomb, линия из 5 → color), сработавшие спецтайлы сносят
-// область/тир (цепная реакция), затем гравитация уплотняет столбцы и досыпает новые
-// плитки — и так пока есть матчи. Свап без матча откатывается (если ни одна из двух
-// плиток не спецтайл; спецтайл можно «применить» всегда).
+// БУСТЕРЫ (самостоятельные объекты, cells[i]=null):
+//   • фигура T/L (пересечение линий 3+ по верт. и гориз.) → 💣 Бомба (взрыв 3×3);
+//   • квадрат 2×2 → 🚀 Ракета (h/v рандом; сносит весь ряд/столбец);
+//   • линия из 5 → 🧲 Магнит (собирает весь тир).
+// Затем гравитация уплотняет столбцы и досыпает новые плитки — пока есть матчи.
+// Свап без матча откатывается (если ни одна из двух клеток не бустер). Бустер
+// активируется свайпом с любым объектом (матч не нужен), либо цепной реакцией
+// (попал под взрыв бомбы / пролёт ракеты / зону магнита).
 //
 // Здесь — только расчёт/мутация поля. Ввод (pointer, анимации) — в ui/dom/boardView.ts.
 // Ценность сбора (деньги) — в core/economy.ts.
@@ -31,66 +35,67 @@ export function swapCells(field: FieldState, a: number, b: number): void {
   const ts = sp[a]; sp[a] = sp[b]; sp[b] = ts;
 }
 
+/** Занята ли клетка (плитка ИЛИ бустер) — для гравитации и генерации. */
+function isOccupied(field: FieldState, idx: number, sp: (SpecialKind | null)[]): boolean {
+  return isValidTier(field.cells[idx]) || !!sp[idx];
+}
+
 // ─── Поиск матчей ──────────────────────────────────────────────────────────────
 
-/** Спавн спецтайла на anchor-клетке матч-группы. */
+/** Спавн бустера на anchor-клетке матч-группы. tier — тир породившей группы (инфо). */
 export interface MatchSpawn { idx: number; kind: SpecialKind; tier: Tier; }
-/** Результат поиска матчей: какие клетки схлопнуть + где родить спецтайлы. */
+/** Результат поиска матчей: какие клетки схлопнуть + где родить бустеры. */
 export interface MatchResult { cleared: Set<number>; spawns: MatchSpawn[]; }
 
 /**
  * Найти все матчи на поле: линии ≥ minLine (верт./гориз.) и квадраты 2×2 одного тира.
- * Линии ≥ colorLineLen рождают `color`, квадраты 2×2 — `bomb`. `moved` (если задан) —
- * клетки последнего свапа: anchor спавна выбирается среди них (спецтайл рождается там,
- * где играл игрок), иначе — в середине линии / низ-лево квадрата.
+ * Клетки группируются (4-смежность, один тир) → на группу рождается ОДИН бустер по
+ * приоритету формы: линия ≥ colorLineLen → magnet; пересечение линий 3+ (T/L/+) → bomb;
+ * квадрат 2×2 → rocket (h/v рандом по rng). Прямая линия 3/4 без пересечения/квадрата —
+ * обычный схлоп без бустера. `moved` (если задан) — клетки последнего свапа: anchor
+ * выбирается среди них (бустер рождается там, где играл игрок).
  */
-export function findMatches(field: FieldState, moved?: Iterable<number>): MatchResult {
+export function findMatches(
+  field: FieldState,
+  moved?: Iterable<number>,
+  rng: () => number = Math.random,
+): MatchResult {
   const { cols, rows } = field;
   const cells = field.cells;
+  const N = cols * rows;
   const cleared = new Set<number>();
-  const spawnMap = new Map<number, MatchSpawn>();
   const movedSet = new Set<number>(moved ?? []);
   const { minLine, colorLineLen } = balance.match;
 
-  // color > bomb при совпадении anchor.
-  const addSpawn = (idx: number, kind: SpecialKind, tier: Tier): void => {
-    const ex = spawnMap.get(idx);
-    if (ex && (ex.kind === 'color' || kind !== 'color')) return;
-    spawnMap.set(idx, { idx, kind, tier });
-  };
-  const pickAnchor = (group: number[]): number => {
-    for (const i of group) if (movedSet.has(i)) return i;
-    return group[Math.floor(group.length / 2)];
-  };
+  // Длина линии-матча, проходящей через клетку (0 — не в линии ≥ minLine).
+  const hLen = new Array<number>(N).fill(0);
+  const vLen = new Array<number>(N).fill(0);
+  const inSquare = new Set<number>();
 
   // Горизонтальные линии.
   for (let y = 0; y < rows; y++) {
-    let run = 1;
-    for (let x = 1; x <= cols; x++) {
-      const prev = cells[xyToIdx(x - 1, y, cols)];
-      const cur = x < cols ? cells[xyToIdx(x, y, cols)] : null;
-      if (x < cols && isValidTier(cur) && cur === prev) { run++; continue; }
-      if (isValidTier(prev) && run >= minLine) {
-        const group: number[] = [];
-        for (let k = x - run; k < x; k++) { const i = xyToIdx(k, y, cols); cleared.add(i); group.push(i); }
-        if (run >= colorLineLen) addSpawn(pickAnchor(group), 'color', prev);
-      }
-      run = 1;
+    let x = 0;
+    while (x < cols) {
+      const t = cells[xyToIdx(x, y, cols)];
+      if (!isValidTier(t)) { x++; continue; }
+      let x2 = x + 1;
+      while (x2 < cols && cells[xyToIdx(x2, y, cols)] === t) x2++;
+      const len = x2 - x;
+      if (len >= minLine) for (let k = x; k < x2; k++) { const i = xyToIdx(k, y, cols); cleared.add(i); hLen[i] = len; }
+      x = x2;
     }
   }
   // Вертикальные линии.
   for (let x = 0; x < cols; x++) {
-    let run = 1;
-    for (let y = 1; y <= rows; y++) {
-      const prev = cells[xyToIdx(x, y - 1, cols)];
-      const cur = y < rows ? cells[xyToIdx(x, y, cols)] : null;
-      if (y < rows && isValidTier(cur) && cur === prev) { run++; continue; }
-      if (isValidTier(prev) && run >= minLine) {
-        const group: number[] = [];
-        for (let k = y - run; k < y; k++) { const i = xyToIdx(x, k, cols); cleared.add(i); group.push(i); }
-        if (run >= colorLineLen) addSpawn(pickAnchor(group), 'color', prev);
-      }
-      run = 1;
+    let y = 0;
+    while (y < rows) {
+      const t = cells[xyToIdx(x, y, cols)];
+      if (!isValidTier(t)) { y++; continue; }
+      let y2 = y + 1;
+      while (y2 < rows && cells[xyToIdx(x, y2, cols)] === t) y2++;
+      const len = y2 - y;
+      if (len >= minLine) for (let k = y; k < y2; k++) { const i = xyToIdx(x, k, cols); cleared.add(i); vLen[i] = len; }
+      y = y2;
     }
   }
   // Квадраты 2×2 одного тира.
@@ -103,13 +108,65 @@ export function findMatches(field: FieldState, moved?: Iterable<number>): MatchR
       const i01 = xyToIdx(x, y + 1, cols);
       const i11 = xyToIdx(x + 1, y + 1, cols);
       if (cells[i10] === t && cells[i01] === t && cells[i11] === t) {
-        const group = [i00, i10, i01, i11];
-        for (const i of group) cleared.add(i);
-        addSpawn(pickAnchor(group), 'bomb', t);
+        for (const i of [i00, i10, i01, i11]) { cleared.add(i); inSquare.add(i); }
       }
     }
   }
-  return { cleared, spawns: [...spawnMap.values()] };
+
+  // Группировка схлопнутых клеток (связные компоненты, один тир) → 1 бустер на группу.
+  const spawns: MatchSpawn[] = [];
+  const seen = new Set<number>();
+  for (const start of cleared) {
+    if (seen.has(start)) continue;
+    const tier = cells[start] as Tier;
+    const group: number[] = [];
+    const stack = [start];
+    seen.add(start);
+    while (stack.length) {
+      const i = stack.pop() as number;
+      group.push(i);
+      const { x, y } = idxToXY(i, cols);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        const ni = xyToIdx(nx, ny, cols);
+        if (!seen.has(ni) && cleared.has(ni) && cells[ni] === tier) { seen.add(ni); stack.push(ni); }
+      }
+    }
+
+    // Признаки формы группы.
+    let maxLine = 0;
+    let intersection = -1; // клетка с линиями 3+ И по верт. И по гориз. (T/L/+)
+    let square = -1;
+    for (const i of group) {
+      const ml = Math.max(hLen[i], vLen[i]);
+      if (ml > maxLine) maxLine = ml;
+      if (intersection < 0 && hLen[i] >= minLine && vLen[i] >= minLine) intersection = i;
+      if (square < 0 && inSquare.has(i)) square = i;
+    }
+    // anchor: предпочесть клетку свапа (если подходит форме), иначе fallback.
+    const pickMoved = (pred: (i: number) => boolean, fallback: number): number => {
+      for (const i of group) if (movedSet.has(i) && pred(i)) return i;
+      return fallback;
+    };
+
+    if (maxLine >= colorLineLen) {
+      const onLong = group.filter((i) => hLen[i] >= colorLineLen || vLen[i] >= colorLineLen);
+      const fallback = onLong.length ? onLong[Math.floor(onLong.length / 2)] : group[0];
+      const anchor = pickMoved((i) => hLen[i] >= colorLineLen || vLen[i] >= colorLineLen, fallback);
+      spawns.push({ idx: anchor, kind: 'magnet', tier });
+    } else if (intersection >= 0) {
+      const anchor = pickMoved((i) => hLen[i] >= minLine && vLen[i] >= minLine, intersection);
+      spawns.push({ idx: anchor, kind: 'bomb', tier });
+    } else if (square >= 0) {
+      const anchor = pickMoved((i) => inSquare.has(i), square);
+      const kind: SpecialKind = rng() < 0.5 ? 'rocket-h' : 'rocket-v';
+      spawns.push({ idx: anchor, kind, tier });
+    }
+    // иначе — прямая линия 3/4 без пересечения/квадрата: обычный схлоп без бустера.
+  }
+  return { cleared, spawns };
 }
 
 /** Есть ли на поле хоть один матч (линия ≥ minLine или квадрат 2×2). */
@@ -117,23 +174,25 @@ export function hasMatchAny(field: FieldState): boolean {
   return findMatches(field).cleared.size > 0;
 }
 
-// ─── Спецтайлы ─────────────────────────────────────────────────────────────────
+// ─── Бустеры (зона поражения и цели) ─────────────────────────────────────────────
 
 /**
- * Клетки, которые сносит спецтайл в `idx` (включая саму клетку):
- *   bomb  — область (2·bombRadius+1)² вокруг (3×3 при radius=1);
- *   color — все клетки тира `targetTier` (по умолчанию — тир самого спецтайла).
- * Если в клетке нет спецтайла — пустое множество.
+ * Клетки, которые сносит бустер в `idx` (включая саму клетку):
+ *   bomb     — область (2·bombRadius+1)² вокруг (3×3 при radius=1);
+ *   rocket-h — весь ряд y; rocket-v — весь столбец x;
+ *   magnet   — все клетки тира `targetTier` (его обязан выбрать вызывающий: тир соседа
+ *              по свайпу или случайный ближайший — magnet «цвета» не имеет).
+ * Если в клетке нет бустера — пустое множество.
  */
-export function activateSpecial(field: FieldState, idx: number, targetTier?: Tier | null): Set<number> {
+export function boosterTargets(field: FieldState, idx: number, targetTier?: Tier | null): Set<number> {
   const sp = getSpecial(field);
   const kind = sp[idx];
   const out = new Set<number>();
   if (!kind) return out;
   out.add(idx);
   const { cols, rows } = field;
+  const { x, y } = idxToXY(idx, cols);
   if (kind === 'bomb') {
-    const { x, y } = idxToXY(idx, cols);
     const r = balance.match.bombRadius;
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -142,30 +201,63 @@ export function activateSpecial(field: FieldState, idx: number, targetTier?: Tie
         if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) out.add(xyToIdx(nx, ny, cols));
       }
     }
-  } else {
-    const tt = targetTier ?? field.cells[idx];
-    if (isValidTier(tt)) {
-      for (let i = 0; i < field.cells.length; i++) if (field.cells[i] === tt) out.add(i);
+  } else if (kind === 'rocket-h') {
+    for (let nx = 0; nx < cols; nx++) out.add(xyToIdx(nx, y, cols));
+  } else if (kind === 'rocket-v') {
+    for (let ny = 0; ny < rows; ny++) out.add(xyToIdx(x, ny, cols));
+  } else { // magnet
+    if (isValidTier(targetTier)) {
+      for (let i = 0; i < field.cells.length; i++) if (field.cells[i] === targetTier) out.add(i);
     }
   }
   return out;
 }
 
 /**
- * Цепная реакция: пока в clearedSet есть клетки со спецтайлом — добавляем их зону
- * поражения (и новые задетые спецтайлы тоже срабатывают). Mutates clearedSet.
+ * Тир случайной БЛИЖАЙШЕЙ к idx плитки (не бустера, не пустой). Для магнита,
+ * активированного цепной реакцией (взрыв/ракета/другой магнит), у которого нет
+ * явной цели-соседа. null — если плиток на поле нет.
  */
-export function expandClearWithSpecials(field: FieldState, clearedSet: Set<number>): void {
+export function pickNearestTileTier(field: FieldState, idx: number, rng: () => number = Math.random): Tier | null {
   const sp = getSpecial(field);
+  const { cols } = field;
+  const { x: ox, y: oy } = idxToXY(idx, cols);
+  let best = Infinity;
+  const bucket: Tier[] = [];
+  for (let i = 0; i < field.cells.length; i++) {
+    const t = field.cells[i];
+    if (i === idx || sp[i] || !isValidTier(t)) continue;
+    const { x, y } = idxToXY(i, cols);
+    const d = Math.abs(x - ox) + Math.abs(y - oy);
+    if (d < best) { best = d; bucket.length = 0; bucket.push(t); }
+    else if (d === best) bucket.push(t);
+  }
+  if (!bucket.length) return null;
+  return bucket[Math.floor(rng() * bucket.length)];
+}
+
+/**
+ * Цепная реакция: пока в clearedSet есть НЕсработавшие бустеры — добавляем их зону
+ * поражения (новые задетые бустеры тоже срабатывают). Магниты в цепи бьют по
+ * случайному ближайшему тиру. `preFired` — бустеры, уже сработавшие с явной целью
+ * (свайп) — их не перезапускаем. Mutates clearedSet.
+ */
+export function expandClearWithSpecials(
+  field: FieldState,
+  clearedSet: Set<number>,
+  rng: () => number = Math.random,
+  preFired?: Iterable<number>,
+): void {
+  const sp = getSpecial(field);
+  const fired = new Set<number>(preFired ?? []);
   const stack: number[] = [];
-  for (const i of clearedSet) if (sp[i]) stack.push(i);
-  const fired = new Set<number>(stack);
+  for (const i of clearedSet) if (sp[i] && !fired.has(i)) { fired.add(i); stack.push(i); }
   while (stack.length) {
     const i = stack.pop() as number;
-    for (const t of activateSpecial(field, i)) {
-      const isNew = !clearedSet.has(t);
+    const target = sp[i] === 'magnet' ? pickNearestTileTier(field, i, rng) : null;
+    for (const t of boosterTargets(field, i, target)) {
       clearedSet.add(t);
-      if (isNew && sp[t] && !fired.has(t)) { fired.add(t); stack.push(t); }
+      if (sp[t] && !fired.has(t)) { fired.add(t); stack.push(t); }
     }
   }
 }
@@ -173,16 +265,16 @@ export function expandClearWithSpecials(field: FieldState, clearedSet: Set<numbe
 // ─── Гравитация и досыпка ──────────────────────────────────────────────────────
 
 export interface GravityResult {
-  /** Существующие плитки, сдвинувшиеся вниз: { from: старый idx, to: новый idx }. */
+  /** Существующие объекты, сдвинувшиеся вниз: { from: старый idx, to: новый idx }. */
   falls: { from: number; to: number }[];
   /** Новые плитки, досыпанные сверху: { idx, tier }. */
   spawns: { idx: number; tier: Tier }[];
 }
 
 /**
- * Гравитация по столбцам + досыпка сверху. Существующие плитки (и их спецтайлы)
+ * Гравитация по столбцам + досыпка сверху. Существующие объекты (плитки И бустеры)
  * уплотняются вниз, сверху добавляются новые случайные тиры [1..tierCount] (без
- * спецтайлов). Mutates field. Возвращает перемещения и спавны для анимаций.
+ * бустеров). Mutates field. Возвращает перемещения и спавны для анимаций.
  */
 export function applyGravityAndRefill(field: FieldState, tierCount: number, rng: () => number = Math.random): GravityResult {
   const falls: { from: number; to: number }[] = [];
@@ -193,11 +285,10 @@ export function applyGravityAndRefill(field: FieldState, tierCount: number, rng:
     let writeY = rows - 1; // следующий свободный слот снизу
     for (let y = rows - 1; y >= 0; y--) {
       const idx = xyToIdx(x, y, cols);
-      const v = field.cells[idx];
-      if (!isValidTier(v)) continue;
+      if (!isOccupied(field, idx, sp)) continue;
       const toIdx = xyToIdx(x, writeY, cols);
       if (toIdx !== idx) {
-        field.cells[toIdx] = v;
+        field.cells[toIdx] = field.cells[idx];
         sp[toIdx] = sp[idx];
         field.cells[idx] = null;
         sp[idx] = null;
@@ -205,7 +296,7 @@ export function applyGravityAndRefill(field: FieldState, tierCount: number, rng:
       }
       writeY--;
     }
-    // Оставшиеся сверху слоты (writeY..0) — новые плитки без спецтайлов.
+    // Оставшиеся сверху слоты (writeY..0) — новые плитки без бустеров.
     for (let y = writeY; y >= 0; y--) {
       const idx = xyToIdx(x, y, cols);
       const tier = 1 + Math.floor(rng() * tierCount);
@@ -225,9 +316,9 @@ export interface CascadeStep {
   cleared: number[];
   /** Тиры обнулённых клеток — для начисления денег. */
   clearedTiers: Tier[];
-  /** Anchor-клетки, ставшие спецтайлами (морфинг существующей плитки). */
+  /** Anchor-клетки, ставшие бустерами (самостоятельные объекты). */
   spawns: MatchSpawn[];
-  /** Перемещения уцелевших плиток вниз. */
+  /** Перемещения уцелевших объектов вниз. */
   falls: { from: number; to: number }[];
   /** Новые плитки сверху. */
   refills: { idx: number; tier: Tier }[];
@@ -269,9 +360,11 @@ export function countMatchGroups(field: FieldState, cleared: Set<number>): numbe
 }
 
 /**
- * Применить готовый clear-set + спавны: цепная реакция спецтайлов, обнуление клеток,
- * установка спецтайлов на anchor-клетки, гравитация + досыпка. Mutates field и
- * clearedSet. Возвращает дельту для анимации.
+ * Применить готовый clear-set + спавны: обнуление клеток, установка бустеров на
+ * anchor-клетки (cells=null — самостоятельный объект), гравитация + досыпка. НЕ
+ * запускает цепную реакцию бустеров (её делает вызывающий до applyClear через
+ * expandClearWithSpecials — натуральные матчи бустеров не содержат). Mutates field
+ * и clearedSet. Возвращает дельту для анимации.
  */
 export function applyClear(
   field: FieldState,
@@ -280,9 +373,8 @@ export function applyClear(
   tierCount: number,
   rng: () => number = Math.random,
 ): CascadeStep {
-  expandClearWithSpecials(field, clearedSet);
   const sp = getSpecial(field);
-  // Anchor-клетки переживают схлоп — на их месте вырастет спецтайл.
+  // Anchor-клетки переживают схлоп — на их месте вырастет бустер.
   for (const s of spawns) clearedSet.delete(s.idx);
 
   const cleared: number[] = [];
@@ -294,7 +386,8 @@ export function applyClear(
     sp[i] = null;
     cleared.push(i);
   }
-  for (const s of spawns) { field.cells[s.idx] = s.tier; sp[s.idx] = s.kind; }
+  // Бустер — самостоятельный объект: плитки под ним нет (cells=null).
+  for (const s of spawns) { field.cells[s.idx] = null; sp[s.idx] = s.kind; }
 
   const g = applyGravityAndRefill(field, tierCount, rng);
   return { cleared, clearedTiers, spawns, falls: g.falls, refills: g.spawns, groups: 0 };
@@ -303,7 +396,8 @@ export function applyClear(
 /**
  * Один шаг каскада по матчам поля: найти матчи → применить. Возвращает дельту или
  * null, если матчей нет (каскад окончен). `moved` — клетки свапа для anchor спавна
- * (актуально для первого шага).
+ * (актуально для первого шага). Натуральные матчи бустеров не задевают (у них нет
+ * тира), поэтому цепная реакция здесь не нужна.
  */
 export function resolveStep(
   field: FieldState,
@@ -311,9 +405,9 @@ export function resolveStep(
   rng: () => number = Math.random,
   moved?: Iterable<number>,
 ): CascadeStep | null {
-  const m = findMatches(field, moved);
+  const m = findMatches(field, moved, rng);
   if (m.cleared.size === 0 && m.spawns.length === 0) return null;
-  const groups = countMatchGroups(field, m.cleared); // считаем ДО обнуления и спец-расширения
+  const groups = countMatchGroups(field, m.cleared); // считаем ДО обнуления
   const step = applyClear(field, m.cleared, m.spawns, tierCount, rng);
   step.groups = groups;
   return step;
@@ -321,7 +415,7 @@ export function resolveStep(
 
 // ─── Валидность хода / дедлок ───────────────────────────────────────────────────
 
-/** Даст ли свап a↔b матч? Спецтайл «применяется» всегда. Поле не меняется (откат). */
+/** Даст ли свап a↔b матч? Бустер «применяется» всегда. Поле не меняется (откат). */
 export function wouldSwapMatch(field: FieldState, a: number, b: number): boolean {
   const sp = getSpecial(field);
   if (sp[a] || sp[b]) return true;
@@ -331,7 +425,7 @@ export function wouldSwapMatch(field: FieldState, a: number, b: number): boolean
   return has;
 }
 
-/** Есть ли хоть один доступный ход (валидный свап или спецтайл на поле). */
+/** Есть ли хоть один доступный ход (валидный свап или бустер на поле). */
 export function hasAnyValidMove(field: FieldState): boolean {
   const { cols, rows } = field;
   const sp = getSpecial(field);

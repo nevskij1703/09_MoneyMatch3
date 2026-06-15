@@ -2,9 +2,10 @@
 //
 // Ввод: игрок ЗАЖИМАЕТ плитку и СВАЙПАЕТ к ортогональному соседу → они меняются
 // местами. Если обмен создал линию 3+ или квадрат 2×2 — поле разрешается каскадами
-// (схлоп → деньги в Баланс → спецтайлы за 2×2/линию-5 → гравитация и досыпка →
-// повтор). Свайп со спецтайлом «применяет» его (без обмена). Свап без матча
-// откатывается. Логика поля — pure-функции core/match3.ts; здесь — ввод и анимации.
+// (схлоп → деньги в Баланс → БУСТЕРЫ за форму T/L (💣), квадрат 2×2 (🚀) и линию-5
+// (🧲) → гравитация и досыпка → повтор). Свайп бустера с любым соседом «применяет»
+// его (без обмена; оба бустера срабатывают, если свайпнуты друг с другом). Свап без
+// матча откатывается. Логика поля — pure-функции core/match3.ts; здесь — ввод/анимации.
 
 import type { FieldState, Tier, SpecialKind } from '../../types';
 import type { CascadeStep } from '../../core/match3';
@@ -12,7 +13,7 @@ import { idxToXY, isValidTier, xyToIdx, getSpecial } from '../../core/board';
 import { balance } from '../../config/balance';
 import {
   areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep,
-  activateSpecial, hasAnyValidMove,
+  boosterTargets, pickNearestTileTier, expandClearWithSpecials, hasAnyValidMove,
 } from '../../core/match3';
 import { shuffleBoard } from '../../core/boosters';
 import { el, centerTransform } from './dom';
@@ -93,18 +94,21 @@ export class BoardView {
     }
   }
 
-  /** Полный rebuild всех плиток по field (включая спецтайлы). */
+  /** Полный rebuild всех объектов по field (плитки + самостоятельные бустеры). */
   rebuildTiles(): void {
     for (const t of this.tileByIndex.values()) t.remove();
     this.tileByIndex.clear();
+    const sp = getSpecial(this.field);
     for (let i = 0; i < this.field.cells.length; i++) {
+      const kind = sp[i];
       const cell = this.field.cells[i];
-      if (isValidTier(cell)) this.tileByIndex.set(i, this.makeTile(i, cell));
+      if (kind) this.tileByIndex.set(i, this.makeBoosterTile(i, kind));
+      else if (isValidTier(cell)) this.tileByIndex.set(i, this.makeTile(i, cell));
     }
     this.clearSelection();
   }
 
-  /** Создать плитку (тир-арт + glow + спец-оверлей по field.special[idx]). */
+  /** Создать плитку-тир (арт + glow). */
   private makeTile(idx: number, tier: Tier): HTMLElement {
     const c = this.cellCenter(idx);
     const tile = el('div', {
@@ -122,19 +126,29 @@ export class BoardView {
 
     el('div', { cls: 'tier-glow', parent: tile });
 
-    const sp = getSpecial(this.field)[idx];
-    if (sp) this.applySpecialVisual(tile, sp);
-
     this.panel.appendChild(tile);
     return tile;
   }
 
-  /** Навесить спец-вид (рамка-класс + значок) на существующую плитку. */
-  private applySpecialVisual(tile: HTMLElement, kind: SpecialKind): void {
-    tile.classList.add('special', kind === 'bomb' ? 'special-bomb' : 'special-color');
-    if (!tile.querySelector('.special-badge')) {
-      el('div', { cls: 'special-badge', text: kind === 'bomb' ? '💣' : '🧲', parent: tile });
+  /** Создать САМОСТОЯТЕЛЬНЫЙ бустер-объект (💣 / 🚀 / 🧲) с пульс-рамкой. */
+  private makeBoosterTile(idx: number, kind: SpecialKind): HTMLElement {
+    const c = this.cellCenter(idx);
+    const base = kind === 'bomb' ? 'bomb' : kind === 'magnet' ? 'magnet' : 'rocket';
+    const tile = el('div', {
+      cls: `board-tile booster booster-${base}`,
+      style: `left:0;top:0;width:${this.cellW}px;height:${this.cellH}px;transform:${centerTransform(c.x, c.y, 1)};`,
+    });
+    tile.dataset.booster = kind;
+
+    const glyph = kind === 'bomb' ? '💣' : kind === 'magnet' ? '🧲' : '🚀';
+    const g = el('div', { cls: 'booster-glyph', text: glyph, parent: tile });
+    g.style.fontSize = `${Math.round(this.iconSize * 0.58)}px`;
+    if (kind === 'rocket-h' || kind === 'rocket-v') {
+      el('div', { cls: `booster-dir dir-${kind === 'rocket-h' ? 'h' : 'v'}`, text: kind === 'rocket-h' ? '⇆' : '⇅', parent: tile });
     }
+
+    this.panel.appendChild(tile);
+    return tile;
   }
 
   private cellCenter(idx: number): { x: number; y: number } {
@@ -216,11 +230,24 @@ export class BoardView {
     const bSpec = sp[b];
 
     if (aSpec || bSpec) {
-      // Применение спецтайла: срабатывает на месте (без обмена). Цель color — тир соседа.
-      // Взрыв бустера комбо НЕ повышает (groups 0).
+      // Свайп бустера с любым объектом активирует его (матч не нужен). Если оба —
+      // бустеры, срабатывают оба. Магнит цель: тир соседней плитки, а если сосед —
+      // бустер (магнит не собирает бустеры) → случайная ближайшая плитка. Взрыв
+      // бустера комбо НЕ повышает (groups 0). Затем цепная реакция остальных задетых.
       const seed = new Set<number>();
-      if (aSpec) for (const x of activateSpecial(this.field, a, this.field.cells[b])) seed.add(x);
-      if (bSpec) for (const x of activateSpecial(this.field, b, this.field.cells[a])) seed.add(x);
+      const fired = new Set<number>();
+      const fire = (self: number, partner: number): void => {
+        let target: Tier | null = null;
+        if (sp[self] === 'magnet') {
+          const partnerTier = this.field.cells[partner];
+          target = isValidTier(partnerTier) ? partnerTier : pickNearestTileTier(this.field, self, Math.random);
+        }
+        fired.add(self);
+        for (const c of boosterTargets(this.field, self, target)) seed.add(c);
+      };
+      if (aSpec) fire(a, b);
+      if (bSpec) fire(b, a);
+      expandClearWithSpecials(this.field, seed, Math.random, fired);
       const seedStep = applyClear(this.field, seed, [], balance.tierCount, Math.random);
       await this.animateStep(seedStep);
       await this.runNaturalCascade(undefined);
@@ -295,12 +322,21 @@ export class BoardView {
     // 2) Передать шаг в GameApp для накопления денег + комбо (показ — над полем).
     this.callbacks.onCascadeStep(step.clearedTiers, step.groups);
 
-    // 3) Морф anchor-клеток в спецтайлы (плитка уже на месте, не схлопнута).
+    // 3) Anchor-клетки становятся САМОСТОЯТЕЛЬНЫМИ бустерами (заменяем плитку объектом).
     for (const s of step.spawns) {
-      let tile = this.tileByIndex.get(s.idx);
-      if (!tile) { tile = this.makeTile(s.idx, s.tier); this.tileByIndex.set(s.idx, tile); }
-      tile.dataset.tier = String(s.tier);
-      this.applySpecialVisual(tile, s.kind);
+      const old = this.tileByIndex.get(s.idx);
+      if (old) old.remove();
+      const tile = this.makeBoosterTile(s.idx, s.kind);
+      this.tileByIndex.set(s.idx, tile);
+      const c = this.cellCenter(s.idx);
+      tile.animate(
+        [
+          { transform: centerTransform(c.x, c.y, 0.2), opacity: 0 },
+          { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
+          { transform: centerTransform(c.x, c.y, 1) },
+        ],
+        { duration: 280, easing: EASE_OUT },
+      );
     }
 
     // 4) Гравитация (падения уцелевших — включая спецтайлы) + досыпка сверху.

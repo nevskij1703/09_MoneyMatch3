@@ -72,13 +72,20 @@ function isValidBoard(b: any): b is FieldState {
   );
 }
 
-/** Привести board.special к валидному массиву длины cells (мусор/отсутствие → null). */
+/** Допустимые типы бустеров в сейве (старый 'color' и прочий мусор → null). */
+const SPECIAL_KINDS = new Set<SpecialKind>(['bomb', 'rocket-h', 'rocket-v', 'magnet']);
+
+/**
+ * Привести board.special к валидному массиву длины cells (мусор/отсутствие → null).
+ * Бустер — самостоятельный объект: где он стоит, плитки нет (cells[i] = null).
+ */
 function normalizeSpecial(board: FieldState): void {
   const src: any[] = Array.isArray(board.special) ? board.special : [];
   const out: (SpecialKind | null)[] = [];
   for (let i = 0; i < board.cells.length; i++) {
     const v = src[i];
-    out.push(v === 'bomb' || v === 'color' ? v : null);
+    if (SPECIAL_KINDS.has(v)) { out.push(v); board.cells[i] = null; }
+    else out.push(null);
   }
   board.special = out;
 }
