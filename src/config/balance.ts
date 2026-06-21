@@ -55,11 +55,19 @@ export interface Balance {
     startBalance: number;
     /** Стартовый запас 💎. */
     startDiamonds: number;
-    /** Стартовый множитель ценности сбора (инвестиции поднимают его — будущая фича). */
+    /** Стартовый множитель ценности сбора (HUD «Income ×N»; инвестиции/уровень поднимают — будущее). */
     investmentMultiplier: number;
   };
+  /** Стартовый уровень игрока (HUD «Level»; прокачка — будущее окно). */
+  startLevel: number;
+  energy: {
+    /** Максимум энергии (HUD «N/max»). */
+    max: number;
+    /** Секунд на восстановление 1 энергии (показ таймера; реген/трата — будущее). */
+    regenSeconds: number;
+  };
   boosters: {
-    /** 4 типа бустеров (пока заглушки — помогают собирать деньги с поля). */
+    /** 4 бустера-кнопки (bomb/drone/rocket/magnet; эффекты — будущее). На поле НЕ спавнятся. */
     definitions: BoosterDef[];
   };
 }
@@ -80,7 +88,7 @@ export const balance: Balance = {
   tierCount: 4,
   board: {
     cols: 6,
-    rows: 6,
+    rows: 5, // макет Hamster Bank: 6×5 (освобождает место под Level/Energy/Income, офферы, кнопки-бустеры)
   },
   match: {
     minLine: 3,        // 3 в ряд по верт./гориз. схлопываются
@@ -95,13 +103,19 @@ export const balance: Balance = {
     startDiamonds: 50,
     investmentMultiplier: 1,
   },
+  startLevel: 1,
+  energy: {
+    max: 100,
+    regenSeconds: 600,
+  },
   boosters: {
-    // Заглушки этой итерации (реальные эффекты — будущая фаза). Помогают собирать деньги:
+    // Кнопки-бустеры (реальные эффекты — будущая фаза). Иконки — public/assets/boosters/<id>.png.
+    // glyph — эмодзи-фолбэк. starterCount подобран под демо-вид макета.
     definitions: [
-      { id: 'shuffle',   name: 'Перемешать', glyph: '🔀', starterCount: 3 },
-      { id: 'hammer',    name: 'Молоток',    glyph: '🔨', starterCount: 3 },
-      { id: 'lightning', name: 'Молния',     glyph: '⚡', starterCount: 3 },
-      { id: 'magnet',    name: 'Магнит',     glyph: '🧲', starterCount: 3 },
+      { id: 'bomb',   name: 'Бомба',  glyph: '💣', starterCount: 3 },
+      { id: 'drone',  name: 'Дрон',   glyph: '🛸', starterCount: 8 },
+      { id: 'rocket', name: 'Ракета', glyph: '🚀', starterCount: 12 },
+      { id: 'magnet', name: 'Магнит', glyph: '🧲', starterCount: 0 },
     ],
   },
 };

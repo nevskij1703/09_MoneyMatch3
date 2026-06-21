@@ -1,9 +1,9 @@
-// Оркестратор главного экрана MoneyMatch3.
+// Оркестратор главного экрана Hamster Bank.
 //
-// Держит #stage 384×844 с FIT-масштабированием, собирает вью (HUD / Баффет /
-// поле / нижняя зона), пробрасывает сбор цепочки в экономику (Баланс) и открывает
-// заглушки разделов. Пассивного дохода/таймеров нет — игра активная (tick-петля
-// не нужна). Сохраняем при сборе и на visibility/pagehide.
+// Держит #stage 390×844 с FIT-масштабированием, собирает вью (шапка / карта баланса /
+// офферы / инфо-строка / поле / нижняя зона), пробрасывает сбор каскада в экономику
+// (Баланс) и открывает заглушки разделов. Пассивного дохода/таймеров нет — игра активная.
+// Сохраняем при сборе и на visibility/pagehide.
 
 import { getData, save, update } from '../core/storage';
 import { commitMove, comboTotal, tileCollectValue } from '../core/economy';
@@ -12,20 +12,25 @@ import type { Tier } from '../types';
 import type { BoosterId } from '../core/boosters';
 import { balance } from '../config/balance';
 import { el } from '../ui/dom/dom';
-import { HudView } from '../ui/dom/hudView';
-import { BuffettView } from '../ui/dom/buffettView';
+import { HeaderView } from '../ui/dom/headerView';
+import { BalanceCardView, MONEY_TARGET } from '../ui/dom/balanceCardView';
+import { OffersView } from '../ui/dom/offersView';
+import { InfoRowView } from '../ui/dom/infoRowView';
 import { BoardView } from '../ui/dom/boardView';
-import { ActionBarView } from '../ui/dom/actionBarView';
+import { ActionBarView, type TabId } from '../ui/dom/actionBarView';
 import { openStubModal } from '../ui/stubModal';
 
-const DESIGN_W = 384;
+const DESIGN_W = 390;
 const DESIGN_H = 844;
 
 export class GameApp {
-  private hud!: HudView;
-  private buffett!: BuffettView;
+  private header!: HeaderView;
+  private card!: BalanceCardView;
+  private offers!: OffersView;
+  private infoRow!: InfoRowView;
   private board!: BoardView;
   private actionBar!: ActionBarView;
+
   private comboEl: HTMLDivElement | null = null;
   private moveBaseSum = 0; // накопленная база денег за текущий ход (до комбо-бонуса)
   private moveCombo = 0;   // накопленный уровень комбо за ход (число натуральных матч-групп)
@@ -34,8 +39,16 @@ export class GameApp {
     this.layout();
     window.addEventListener('resize', this.layout);
 
-    this.hud = new HudView(stage, { onDiamondsTap: () => this.openShop() });
-    this.buffett = new BuffettView(stage);
+    this.header = new HeaderView(stage, {
+      onBell: () => this.openStub('🔔 Уведомления', 'Уведомления — в разработке. Здесь появятся новости, награды и напоминания.'),
+      onSettings: () => this.openStub('⚙️ Настройки', 'Настройки — в разработке. Звук, вибрация и язык появятся здесь.'),
+    });
+    this.card = new BalanceCardView(stage);
+    this.offers = new OffersView(stage, {
+      onSale: () => this.openStub('🐷 SALE', 'Спецпредложение — в разработке. Наборы 💎 со скидкой появятся ближе к релизу.'),
+      onAd: () => this.openStub('▶️ Watch Ad', 'Просмотр рекламы за награду — в разработке. Появится в одной из ближайших итераций.'),
+    });
+    this.infoRow = new InfoRowView(stage);
 
     this.board = new BoardView(stage, getData().board, {
       onCascadeStep: (tiers, groups) => this.onCascadeStep(tiers, groups),
@@ -45,13 +58,7 @@ export class GameApp {
 
     this.actionBar = new ActionBarView(stage, {
       onBooster: (id) => this.onBooster(id),
-      onPortfolioTap: () =>
-        this.openStub('📊 Портфель', 'Портфель — в разработке. Сводка капитала, статистика и коллекции будут здесь.'),
-      onTasksTap: () =>
-        this.openStub('📋 Задачи', 'Задачи — в разработке. Ежедневные цели и награды появятся позже.'),
-      onInvestsTap: () =>
-        this.openStub('📈 Инвестиции', 'Инвестиции — в разработке. Здесь можно будет тратить Баланс, чтобы повышать ценность собираемых денег.'),
-      onShopTap: () => this.openShop(),
+      onTab: (id) => this.onTab(id),
     });
 
     window.addEventListener('visibilitychange', this.onVisibility);
@@ -87,8 +94,8 @@ export class GameApp {
 
     let gained = 0;
     update((d) => { gained = commitMove(d, baseSum, combo); });
-    if (combo >= 2) this.buffett.popReaction();
-    this.flyMoneyToBalance(gained); // на прилёте обновит HUD-баланс
+    if (combo >= 2) this.card.mascotReact();
+    this.flyMoneyToBalance(gained); // на прилёте обновит карту-баланс
     save();
   }
 
@@ -118,7 +125,7 @@ export class GameApp {
     if (this.comboEl) { this.comboEl.remove(); this.comboEl = null; }
   }
 
-  /** Деньги «улетают» из баннера комбо в плашку Баланса; на прилёте Баланс обновляется. */
+  /** Деньги «улетают» из баннера комбо в карту баланса; на прилёте карта обновляется. */
   private flyMoneyToBalance(amount: number): void {
     const banner = this.comboEl;
     this.comboEl = null;
@@ -126,9 +133,9 @@ export class GameApp {
       const a = banner.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' });
       a.onfinish = () => banner.remove();
     }
-    // Старт — над полем (где баннер), цель — центр баланс-плашки (≈192,127) в дизайн-координатах.
-    const startX = 192, startY = 345;
-    const dx = 192 - startX, dy = 127 - startY;
+    // Старт — над полем (где баннер), цель — значение баланса в карте.
+    const startX = 195, startY = 400;
+    const dx = MONEY_TARGET.x - startX, dy = MONEY_TARGET.y - startY;
     const fly = el('div', {
       cls: 'combo-fly',
       text: `+$${formatMoney(amount)}`,
@@ -145,8 +152,8 @@ export class GameApp {
     );
     anim.onfinish = () => {
       fly.remove();
-      this.hud.refresh();
-      this.hud.bumpBalance();
+      this.card.refresh();
+      this.card.bumpBalance();
     };
   }
 
@@ -154,12 +161,19 @@ export class GameApp {
     const def = balance.boosters.definitions.find((b) => b.id === id);
     this.openStub(
       `${def?.glyph ?? '🎁'} ${def?.name ?? 'Бустер'}`,
-      'Бустер — в разработке. Поможет собирать деньги с поля (перемешать, разбить плитку, собрать линию и т.п.). Появится в одной из ближайших итераций.',
+      'Бустер — в разработке. Будет давать эффект на поле (взрыв, ряд/столбец, сбор тира и т.п.). Появится в одной из ближайших итераций.',
     );
   }
 
-  private openShop(): void {
-    this.openStub('🛒 Магазин', 'Магазин — в разработке. Пополнение 💎 и бустер-паки появятся ближе к релизу.');
+  private onTab(id: TabId): void {
+    const stubs: Record<TabId, [string, string]> = {
+      build: ['🔨 Постройка', 'Постройка — в разработке. Здесь будешь строить и улучшать свой банк.'],
+      tasks: ['📋 Задачи', 'Задачи — в разработке. Ежедневные цели и награды появятся позже.'],
+      collections: ['🗂️ Коллекции', 'Коллекции — в разработке. Собирай наборы и получай бонусы.'],
+      shop: ['🛒 Магазин', 'Магазин — в разработке. Пополнение 💎 и бустер-паки появятся ближе к релизу.'],
+    };
+    const [title, msg] = stubs[id];
+    this.openStub(title, msg);
   }
 
   private openStub(title: string, message: string): void {
@@ -171,6 +185,5 @@ export class GameApp {
     window.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pagehide', this.onPageHide);
     this.board.destroy();
-    this.buffett.destroy();
   }
 }

@@ -4,10 +4,9 @@
 // Вкладки: Ресурсы (Баланс/💎), Поле (очистка/заливка/перемешать), Бустеры,
 // Баланс-конфиг (быстрые ползунки match + override JSON). Хоткей: ~ (тильда).
 
-import type { SpecialKind } from '../types';
 import { getData, update, reset } from '../core/storage';
 import { balance } from '../config/balance';
-import { makeBoard, getSpecial, isValidTier } from '../core/board';
+import { makeBoard } from '../core/board';
 import { hasAnyValidMove } from '../core/match3';
 import { shuffleBoard } from '../core/boosters';
 import {
@@ -134,27 +133,9 @@ export function initDevPanel(refresh: () => void): void {
     update((d) => { shuffleBoard(d.board); });
     refresh();
   };
-  // Спавн бустера (самостоятельный объект: ставим в клетку, плитку убираем) — для проверки.
-  const spawnSpecial = (kind: SpecialKind): void => {
-    update((d) => {
-      const sp = getSpecial(d.board);
-      const cand: number[] = [];
-      for (let i = 0; i < d.board.cells.length; i++) if (isValidTier(d.board.cells[i]) && !sp[i]) cand.push(i);
-      if (cand.length) { const i = cand[Math.floor(Math.random() * cand.length)]; sp[i] = kind; d.board.cells[i] = null; }
-    });
-    refresh();
-  };
-  const bombBtn = btn('💣 Бомба', 'mm-spawn-bomb');
-  bombBtn.onclick = () => spawnSpecial('bomb');
-  const rocketHBtn = btn('🚀 Ракета ⇆', 'mm-spawn-rocket-h');
-  rocketHBtn.onclick = () => spawnSpecial('rocket-h');
-  const rocketVBtn = btn('🚀 Ракета ⇅', 'mm-spawn-rocket-v');
-  rocketVBtn.onclick = () => spawnSpecial('rocket-v');
-  const magnetBtn = btn('🧲 Магнит', 'mm-spawn-magnet');
-  magnetBtn.onclick = () => spawnSpecial('magnet');
   const movesBtn = btn('Ходы?', 'mm-moves');
   movesBtn.onclick = () => alert(hasAnyValidMove(getData().board) ? 'Ходы есть' : 'ДЕДЛОК (нет ходов)');
-  boardTab.append(clearBtn, randBtn, fillT1, shuffleBtn, bombBtn, rocketHBtn, rocketVBtn, magnetBtn, movesBtn);
+  boardTab.append(clearBtn, randBtn, fillT1, shuffleBtn, movesBtn);
 
   // --- Вкладка «Бустеры» ---
   const boosterTab = makeTab('boost', 'Бустеры');

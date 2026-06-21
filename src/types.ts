@@ -49,10 +49,14 @@ export interface SaveData {
   board: FieldState;
   /**
    * Множитель ценности сбора (будущие инвестиции его поднимают). Сбор плитки =
-   * tierValue(t) × baseTileValue × investmentMultiplier. Старт = 1.
+   * tierValue(t) × baseTileValue × investmentMultiplier. Старт = 1. На экране — «Income ×N».
    */
   investmentMultiplier: number;
-  /** Инвентарь бустеров — счётчик по id (4 типа-заглушки). */
+  /** Уровень игрока (HUD «Level»; прокачка — будущее окно). Старт = balance.startLevel. */
+  level: number;
+  /** Текущая энергия (HUD «Energy N/100»; трата за ход + реген по таймеру — будущее). Старт = energy.max. */
+  energy: number;
+  /** Инвентарь бустеров — счётчик по id (bomb/drone/rocket/magnet, кнопки внизу). */
   boosters: Record<BoosterId, number>;
   /** Всего собрано за всё время (стат + хук будущей прогрессии). */
   totalCollected: number;

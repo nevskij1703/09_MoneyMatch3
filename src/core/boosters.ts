@@ -4,8 +4,8 @@
 
 import type { FieldState } from '../types';
 
-/** Идентификаторы 4 бустеров. Расширяется по мере итераций. */
-export type BoosterId = 'shuffle' | 'hammer' | 'lightning' | 'magnet';
+/** Идентификаторы 4 бустеров-кнопок (макет Hamster Bank). Расширяется по мере итераций. */
+export type BoosterId = 'bomb' | 'drone' | 'rocket' | 'magnet';
 
 /** Перемешать все клетки поля (Fisher-Yates). Mutates field in-place. */
 export function shuffleBoard(field: FieldState, rng: () => number = Math.random): void {

@@ -28,29 +28,31 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #002d69;
+  background: #001d57;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
   font-family: 'Nunito', system-ui, sans-serif;
 }
 
-/* Фон за пределами #stage продолжает градиент макета. */
+/* Фон за пределами #stage — тёмно-синий (под цвет краёв холста Hamster Bank). */
 #viewport {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #002d69 0%, #002d69 13%, #bee2ff 39%, #ffffff 100%);
+  background: #001d57;
 }
 
-/* Дизайн-холст 384×844. transform-origin центр; масштаб ставит GameApp. */
+/* Дизайн-холст 390×844 (макет «Play window»). transform-origin центр; масштаб ставит GameApp. */
 #stage {
   position: relative;
-  width: 384px;
+  width: 390px;
   height: 844px;
-  background: linear-gradient(180deg, #002d69 0%, #002d69 12.98%, #bee2ff 38.94%, #ffffff 100%);
+  background:
+    linear-gradient(180deg, rgba(5, 132, 247, 0) 30%, rgba(5, 132, 247, 0.4) 60%, rgba(5, 132, 247, 0) 88%),
+    radial-gradient(135% 75% at 50% 48%, #00379a 0%, #002a77 60%, #001d57 100%);
   transform-origin: center center;
   flex: 0 0 auto;
   overflow: hidden;
@@ -131,14 +133,18 @@ body {
   border-radius: 5px;
 }
 
-/* Панель-сетка (input-зона) и слоты. */
+/* Панель-сетка (input-зона) и светлые плашки клеток (поверх синей базы поля). */
 .board-panel {
   position: absolute;
 }
 .board-cell {
   position: absolute;
-  background: #fdf6e5;
-  border-radius: 5px;
+  background: #e9f4ff;
+  border-radius: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 0 rgba(18, 110, 196, 0.18),
+    0 0.5px 1px rgba(18, 110, 196, 0.25);
 }
 .board-cell.primary {
   background: #fff3c4;
@@ -736,7 +742,7 @@ body {
 .combo-banner {
   position: absolute;
   left: 50%;
-  top: 300px;
+  top: 372px;
   transform: translate(-50%, 0);
   text-align: center;
   white-space: nowrap;
@@ -982,3 +988,102 @@ body {
   88% { opacity: 0.9; }
   100% { transform: translateY(168px) rotate(180deg); opacity: 0; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   РЕДИЗАЙН «Hamster Bank» (макет Play window, синяя тема). Префикс .hb-*.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Синяя база поля (под светлыми плашками клеток). */
+.hb-board-base {
+  position: absolute;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #a2cefe 0%, #cee1fd 100%);
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 2px #009dff, 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Шапка ─────────────────────────────────────────────────────────────────── */
+.hb-header { position: absolute; }
+.hb-avatar { position: absolute; border-radius: 50%; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+.hb-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hb-logo { position: absolute; }
+.hb-title { font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 24px; color: #fff; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-subtitle { font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 12px; color: #9db8ef; margin-top: 3px; }
+.hb-iconbtn {
+  position: absolute;
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(0, 119, 255, 0.3), rgba(0, 119, 255, 0));
+  border: 1px solid #156ef4;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.hb-iconbtn-img { width: 62%; height: 62%; object-fit: contain; display: block; }
+.hb-badge { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #ff3b3b; color: #fff; font: 800 9px/14px 'Nunito', sans-serif; text-align: center; }
+.hb-settingsbtn { position: absolute; display: flex; align-items: center; justify-content: center; }
+.hb-settingsbtn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* ── Карта баланса ─────────────────────────────────────────────────────────── */
+.hb-card { position: absolute; overflow: visible; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3)); }
+.hb-card-bg {
+  position: absolute; inset: 0; border-radius: 16px; overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 100% 100%, rgba(0, 132, 255, 0.38) 50%, rgba(0, 132, 255, 0) 100%),
+    linear-gradient(180deg, #0059cd 0%, #012871 100%);
+  border: 1px solid rgba(166, 197, 255, 0.5);
+}
+.hb-card-decor { position: absolute; opacity: 0.12; pointer-events: none; }
+.hb-card-mascot { position: absolute; pointer-events: none; z-index: 2; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4)); }
+.hb-card-label { position: absolute; display: flex; align-items: center; gap: 4px; font: 700 14px 'Nunito', sans-serif; color: #9db8ef; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); z-index: 3; white-space: nowrap; }
+.hb-card-eye { width: 15px; height: 15px; object-fit: contain; display: block; opacity: 0.85; }
+.hb-money-row { position: absolute; display: flex; align-items: center; gap: 6px; z-index: 3; }
+.hb-money-icon { width: 32px; height: 32px; object-fit: contain; display: block; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
+.hb-money-value { font: 900 24px 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+
+/* ── Офферы ────────────────────────────────────────────────────────────────── */
+.hb-offer { position: absolute; border-radius: 16px; cursor: pointer; overflow: hidden; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25)); }
+.hb-offer-sale { background: linear-gradient(180deg, #783ded 0%, #331178 100%); border: 1px solid #9948fd; }
+.hb-offer-ad { background: linear-gradient(180deg, rgba(0, 119, 255, 0.45) 0%, rgba(0, 119, 255, 0) 100%), #0a2a6e; border: 1px solid #1d61c7; }
+.hb-offer-title { position: absolute; top: 2px; left: 0; width: 100%; text-align: center; font: 800 13px/15px 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-offer-art { position: absolute; object-fit: contain; display: block; pointer-events: none; }
+.hb-offer-timer, .hb-offer-adrow { position: absolute; bottom: 3px; left: 0; width: 100%; display: flex; gap: 3px; align-items: center; justify-content: center; font: 700 9px 'Nunito', sans-serif; color: #fff; }
+.hb-offer-clock { font-size: 8px; }
+.hb-offer-watch { width: 9px; height: 9px; object-fit: contain; display: block; }
+
+/* ── Инфо-строка (Level / Energy / Income) ─────────────────────────────────── */
+.hb-pill {
+  position: absolute; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(0, 119, 255, 0.5) 0%, rgba(0, 119, 255, 0) 100%), #0a2a6e;
+  border: 1px solid #1d61c7;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25));
+}
+.hb-pill-icon { position: absolute; object-fit: contain; display: block; }
+.hb-pill-label { position: absolute; top: 7px; font: 700 14px 'Nunito', sans-serif; color: #9db8ef; }
+.hb-pill-value { position: absolute; top: 20px; font: 900 20px 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
+.hb-energy-max { font-size: 14px; color: #9db8ef; }
+.hb-energy-timer { position: absolute; top: -3px; right: 6px; font: 800 10px 'Nunito', sans-serif; color: #fc0; }
+
+/* ── Кнопки-бустеры ────────────────────────────────────────────────────────── */
+.hb-booster {
+  position: absolute; border-radius: 50%; cursor: pointer;
+  background: linear-gradient(180deg, #004cdd 0%, rgba(10, 32, 75, 0.59) 100%), #152a96;
+  border: 0.7px solid #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.hb-booster-gloss { position: absolute; left: 6%; top: 6%; width: 88%; height: 88%; object-fit: contain; display: block; pointer-events: none; }
+.hb-booster-icon { position: absolute; left: 9%; top: 9%; width: 82%; height: 82%; object-fit: contain; display: block; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 900 18px 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
+
+/* ── Нижнее меню (5 вкладок) ───────────────────────────────────────────────── */
+.hb-nav { position: absolute; }
+.hb-nav-base {
+  position: absolute; left: 8px; right: 8px; top: 0; height: 82px; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(0, 119, 255, 0.66) 0%, rgba(0, 119, 255, 0) 100%), #0a2358;
+  border: 2px solid #428eff;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25));
+}
+.hb-nav-sel { position: absolute; width: 71px; height: 71px; border-radius: 16px; border: 2px solid #fee900; box-shadow: 0 0 8px rgba(255, 255, 0, 0.45); }
+.hb-nav-tab { position: absolute; cursor: pointer; }
+.hb-nav-tab.main { cursor: default; }
+.hb-nav-icon { position: absolute; left: 50%; top: 8px; width: 46px; height: 46px; transform: translateX(-50%); object-fit: contain; display: block; }
+.hb-nav-label { position: absolute; left: 0; top: 58px; width: 100%; text-align: center; font: 800 11px 'Nunito', sans-serif; color: rgba(255, 255, 255, 0.5); }
+.hb-nav-tab.main .hb-nav-label { color: #fff; }

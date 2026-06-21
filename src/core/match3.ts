@@ -49,30 +49,17 @@ export interface MatchResult { cleared: Set<number>; spawns: MatchSpawn[]; }
 
 /**
  * Найти все матчи на поле: линии ≥ minLine (верт./гориз.) и квадраты 2×2 одного тира.
- * Клетки группируются (4-смежность, один тир) → на группу рождается ОДИН бустер по
- * приоритету формы: линия ≥ colorLineLen → magnet; пересечение линий 3+ (T/L/+) → bomb;
- * квадрат 2×2 → rocket (h/v рандом по rng). Прямая линия 3/4 без пересечения/квадрата —
- * обычный схлоп без бустера. `moved` (если задан) — клетки последнего свапа: anchor
- * выбирается среди них (бустер рождается там, где играл игрок).
+ * Возвращает только клетки для схлопа. БУСТЕРЫ НА ПОЛЕ НЕ РОЖДАЮТСЯ (теперь это кнопки
+ * внизу — см. actionBarView), поэтому `spawns` всегда пуст; любые матчи (вкл. 2×2 / T-L /
+ * линию-5) просто схлопываются.
  */
-export function findMatches(
-  field: FieldState,
-  moved?: Iterable<number>,
-  rng: () => number = Math.random,
-): MatchResult {
+export function findMatches(field: FieldState): MatchResult {
   const { cols, rows } = field;
   const cells = field.cells;
-  const N = cols * rows;
   const cleared = new Set<number>();
-  const movedSet = new Set<number>(moved ?? []);
-  const { minLine, colorLineLen } = balance.match;
+  const { minLine } = balance.match;
 
-  // Длина линии-матча, проходящей через клетку (0 — не в линии ≥ minLine).
-  const hLen = new Array<number>(N).fill(0);
-  const vLen = new Array<number>(N).fill(0);
-  const inSquare = new Set<number>();
-
-  // Горизонтальные линии.
+  // Горизонтальные линии ≥ minLine.
   for (let y = 0; y < rows; y++) {
     let x = 0;
     while (x < cols) {
@@ -80,12 +67,11 @@ export function findMatches(
       if (!isValidTier(t)) { x++; continue; }
       let x2 = x + 1;
       while (x2 < cols && cells[xyToIdx(x2, y, cols)] === t) x2++;
-      const len = x2 - x;
-      if (len >= minLine) for (let k = x; k < x2; k++) { const i = xyToIdx(k, y, cols); cleared.add(i); hLen[i] = len; }
+      if (x2 - x >= minLine) for (let k = x; k < x2; k++) cleared.add(xyToIdx(k, y, cols));
       x = x2;
     }
   }
-  // Вертикальные линии.
+  // Вертикальные линии ≥ minLine.
   for (let x = 0; x < cols; x++) {
     let y = 0;
     while (y < rows) {
@@ -93,8 +79,7 @@ export function findMatches(
       if (!isValidTier(t)) { y++; continue; }
       let y2 = y + 1;
       while (y2 < rows && cells[xyToIdx(x, y2, cols)] === t) y2++;
-      const len = y2 - y;
-      if (len >= minLine) for (let k = y; k < y2; k++) { const i = xyToIdx(x, k, cols); cleared.add(i); vLen[i] = len; }
+      if (y2 - y >= minLine) for (let k = y; k < y2; k++) cleared.add(xyToIdx(x, k, cols));
       y = y2;
     }
   }
@@ -104,69 +89,15 @@ export function findMatches(
       const i00 = xyToIdx(x, y, cols);
       const t = cells[i00];
       if (!isValidTier(t)) continue;
-      const i10 = xyToIdx(x + 1, y, cols);
-      const i01 = xyToIdx(x, y + 1, cols);
-      const i11 = xyToIdx(x + 1, y + 1, cols);
-      if (cells[i10] === t && cells[i01] === t && cells[i11] === t) {
-        for (const i of [i00, i10, i01, i11]) { cleared.add(i); inSquare.add(i); }
+      if (cells[xyToIdx(x + 1, y, cols)] === t && cells[xyToIdx(x, y + 1, cols)] === t && cells[xyToIdx(x + 1, y + 1, cols)] === t) {
+        cleared.add(i00);
+        cleared.add(xyToIdx(x + 1, y, cols));
+        cleared.add(xyToIdx(x, y + 1, cols));
+        cleared.add(xyToIdx(x + 1, y + 1, cols));
       }
     }
   }
-
-  // Группировка схлопнутых клеток (связные компоненты, один тир) → 1 бустер на группу.
-  const spawns: MatchSpawn[] = [];
-  const seen = new Set<number>();
-  for (const start of cleared) {
-    if (seen.has(start)) continue;
-    const tier = cells[start] as Tier;
-    const group: number[] = [];
-    const stack = [start];
-    seen.add(start);
-    while (stack.length) {
-      const i = stack.pop() as number;
-      group.push(i);
-      const { x, y } = idxToXY(i, cols);
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-        const ni = xyToIdx(nx, ny, cols);
-        if (!seen.has(ni) && cleared.has(ni) && cells[ni] === tier) { seen.add(ni); stack.push(ni); }
-      }
-    }
-
-    // Признаки формы группы.
-    let maxLine = 0;
-    let intersection = -1; // клетка с линиями 3+ И по верт. И по гориз. (T/L/+)
-    let square = -1;
-    for (const i of group) {
-      const ml = Math.max(hLen[i], vLen[i]);
-      if (ml > maxLine) maxLine = ml;
-      if (intersection < 0 && hLen[i] >= minLine && vLen[i] >= minLine) intersection = i;
-      if (square < 0 && inSquare.has(i)) square = i;
-    }
-    // anchor: предпочесть клетку свапа (если подходит форме), иначе fallback.
-    const pickMoved = (pred: (i: number) => boolean, fallback: number): number => {
-      for (const i of group) if (movedSet.has(i) && pred(i)) return i;
-      return fallback;
-    };
-
-    if (maxLine >= colorLineLen) {
-      const onLong = group.filter((i) => hLen[i] >= colorLineLen || vLen[i] >= colorLineLen);
-      const fallback = onLong.length ? onLong[Math.floor(onLong.length / 2)] : group[0];
-      const anchor = pickMoved((i) => hLen[i] >= colorLineLen || vLen[i] >= colorLineLen, fallback);
-      spawns.push({ idx: anchor, kind: 'magnet', tier });
-    } else if (intersection >= 0) {
-      const anchor = pickMoved((i) => hLen[i] >= minLine && vLen[i] >= minLine, intersection);
-      spawns.push({ idx: anchor, kind: 'bomb', tier });
-    } else if (square >= 0) {
-      const anchor = pickMoved((i) => inSquare.has(i), square);
-      const kind: SpecialKind = rng() < 0.5 ? 'rocket-h' : 'rocket-v';
-      spawns.push({ idx: anchor, kind, tier });
-    }
-    // иначе — прямая линия 3/4 без пересечения/квадрата: обычный схлоп без бустера.
-  }
-  return { cleared, spawns };
+  return { cleared, spawns: [] };
 }
 
 /** Есть ли на поле хоть один матч (линия ≥ minLine или квадрат 2×2). */
@@ -395,18 +326,15 @@ export function applyClear(
 
 /**
  * Один шаг каскада по матчам поля: найти матчи → применить. Возвращает дельту или
- * null, если матчей нет (каскад окончен). `moved` — клетки свапа для anchor спавна
- * (актуально для первого шага). Натуральные матчи бустеров не задевают (у них нет
- * тира), поэтому цепная реакция здесь не нужна.
+ * null, если матчей нет (каскад окончен). Бустеры на поле не рождаются (spawns пуст).
  */
 export function resolveStep(
   field: FieldState,
   tierCount: number,
   rng: () => number = Math.random,
-  moved?: Iterable<number>,
 ): CascadeStep | null {
-  const m = findMatches(field, moved, rng);
-  if (m.cleared.size === 0 && m.spawns.length === 0) return null;
+  const m = findMatches(field);
+  if (m.cleared.size === 0) return null;
   const groups = countMatchGroups(field, m.cleared); // считаем ДО обнуления
   const step = applyClear(field, m.cleared, m.spawns, tierCount, rng);
   step.groups = groups;
