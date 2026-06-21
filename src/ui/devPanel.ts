@@ -111,6 +111,34 @@ export function initDevPanel(refresh: () => void): void {
   };
   resTab.append(addDiamonds);
 
+  // Энергия: задать точное значение / +regenAmount / полная. Якорь регена сдвигаем на «сейчас»,
+  // иначе старый energyTs на следующем тике мгновенно дотопит энергию обратно.
+  const energyLabel = document.createElement('div');
+  css(energyLabel, 'color:#9aa0a6;margin:10px 0 2px;font-size:11px;');
+  energyLabel.textContent = `Энергия (макс ${balance.energy.max}):`;
+  resTab.append(energyLabel);
+  resTab.append(field('Энергия', 'mm-energy', String(Math.floor(getData().energy))));
+  const syncEnergyInput = (): void => {
+    const inp = document.getElementById('mm-energy') as HTMLInputElement | null;
+    if (inp) inp.value = String(Math.floor(getData().energy));
+  };
+  const setEnergyVal = (val: number): void => {
+    const v = Math.max(0, Math.min(balance.energy.max, Math.floor(val)));
+    update((d) => { d.energy = v; d.energyTs = Date.now(); });
+    syncEnergyInput();
+    refresh();
+  };
+  const setEnergy = btn('Применить', 'mm-set-energy');
+  css(setEnergy, setEnergy.style.cssText.replace('#2e7d32', '#b58900'));
+  setEnergy.onclick = () => setEnergyVal(Number((document.getElementById('mm-energy') as HTMLInputElement).value) || 0);
+  const addEnergy = btn(`+${balance.energy.regenAmount}`, 'mm-add-energy');
+  css(addEnergy, addEnergy.style.cssText.replace('#2e7d32', '#b58900'));
+  addEnergy.onclick = () => setEnergyVal(getData().energy + balance.energy.regenAmount);
+  const fullEnergy = btn('Полная', 'mm-full-energy');
+  css(fullEnergy, fullEnergy.style.cssText.replace('#2e7d32', '#b58900'));
+  fullEnergy.onclick = () => setEnergyVal(balance.energy.max);
+  resTab.append(setEnergy, addEnergy, fullEnergy);
+
   // --- Вкладка «Поле» ---
   const boardTab = makeTab('board', 'Поле');
   const clearBtn = btn('Очистить', 'mm-clear');
@@ -159,6 +187,7 @@ export function initDevPanel(refresh: () => void): void {
     refresh();
     const inp = document.getElementById('mm-balance') as HTMLInputElement | null;
     if (inp) inp.value = String(Math.floor(getData().balance));
+    syncEnergyInput();
   };
   boosterTab.append(resetBtn);
 
@@ -246,6 +275,7 @@ export function initDevPanel(refresh: () => void): void {
     if (!showing) {
       const inp = document.getElementById('mm-balance') as HTMLInputElement | null;
       if (inp) inp.value = String(Math.floor(getData().balance));
+      syncEnergyInput();
       updateStatus();
     }
   };
