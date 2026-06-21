@@ -1,13 +1,23 @@
 // Карта баланса (главный блок экрана Hamster Bank): «Total balance» + 💵 + значение,
-// «Diamonds» + 💎 + значение, маскот-хомяк (вылезает вверх) и финансовый декор.
+// «Diamonds» + 💎 + значение, маскот-хомяк (по пояс, вылезает вверх) и финансовый декор.
 // Координаты — дизайн-холст 390×844 (макет «Play window», Card x=9 y=112 293×158).
 
 import { getData } from '../../core/storage';
-import { formatMoney } from '../../core/money';
+import { formatMoneyFull } from '../../core/money';
 import { el } from './dom';
 
 /** Центр значения баланса в дизайн-координатах — цель для «полёта» собранных денег. */
 export const MONEY_TARGET = { x: 96, y: 164 } as const;
+
+/** Подогнать размер шрифта элемента под maxWidth (уменьшает от maxPx до minPx). */
+function fitText(node: HTMLElement, maxWidth: number, maxPx: number, minPx: number): void {
+  let size = maxPx;
+  node.style.fontSize = `${size}px`;
+  while (size > minPx && node.scrollWidth > maxWidth) {
+    size -= 1;
+    node.style.fontSize = `${size}px`;
+  }
+}
 
 export class BalanceCardView {
   private balanceValue: HTMLDivElement;
@@ -24,8 +34,8 @@ export class BalanceCardView {
     const bills = el('img', { cls: 'hb-card-decor', style: 'left:150px;top:8px;width:46px;height:46px;transform:rotate(-12deg);', parent: bg }) as HTMLImageElement;
     bills.src = 'assets/decor/bills.png'; bills.alt = ''; bills.draggable = false;
 
-    // Маскот-хомяк (вылезает над картой; поверх фона, под текстом).
-    this.mascot = el('img', { cls: 'hb-card-mascot', style: 'left:157px;top:-20px;width:138px;height:177px;', parent: card }) as HTMLImageElement;
+    // Маскот-хомяк: крупнее и обрезан по пояс (object-fit cover + object-position top).
+    this.mascot = el('img', { cls: 'hb-card-mascot', style: 'left:150px;top:-42px;width:176px;height:182px;', parent: card }) as HTMLImageElement;
     this.mascot.src = 'assets/char/hamster.png'; this.mascot.alt = ''; this.mascot.draggable = false;
 
     // «Total balance» + 👁.
@@ -54,8 +64,11 @@ export class BalanceCardView {
 
   refresh(): void {
     const d = getData();
-    this.balanceValue.textContent = formatMoney(d.balance);
-    this.diamondsValue.textContent = d.diamonds.toLocaleString('en-US');
+    this.balanceValue.textContent = formatMoneyFull(d.balance);
+    this.diamondsValue.textContent = formatMoneyFull(d.diamonds);
+    // Все знаки без сокращений; если не влезает — уменьшаем шрифт.
+    fitText(this.balanceValue, 168, 24, 12); // баланс вверху-слева (правее — маскот)
+    fitText(this.diamondsValue, 210, 24, 12); // алмазы ниже, места больше
   }
 
   /** Пульс значения баланса (после прилёта собранных денег). */

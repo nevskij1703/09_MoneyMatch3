@@ -54,8 +54,10 @@ export interface SaveData {
   investmentMultiplier: number;
   /** Уровень игрока (HUD «Level»; прокачка — будущее окно). Старт = balance.startLevel. */
   level: number;
-  /** Текущая энергия (HUD «Energy N/100»; трата за ход + реген по таймеру — будущее). Старт = energy.max. */
+  /** Текущая энергия (HUD «Energy N/100»). Тратится за ход, регенится по таймеру. Старт = energy.max. */
   energy: number;
+  /** Метка (мс) якоря регена энергии: от неё отсчитывается следующий +regenAmount. */
+  energyTs: number;
   /** Инвентарь бустеров — счётчик по id (bomb/drone/rocket/magnet, кнопки внизу). */
   boosters: Record<BoosterId, number>;
   /** Всего собрано за всё время (стат + хук будущей прогрессии). */

@@ -32,7 +32,7 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
-  font-family: 'Nunito', system-ui, sans-serif;
+  font-family: 'Roboto Flex', 'Nunito', system-ui, sans-serif;
 }
 
 /* Фон за пределами #stage — тёмно-синий (под цвет краёв холста Hamster Bank). */
@@ -50,9 +50,7 @@ body {
   position: relative;
   width: 390px;
   height: 844px;
-  background:
-    linear-gradient(180deg, rgba(5, 132, 247, 0) 30%, rgba(5, 132, 247, 0.4) 60%, rgba(5, 132, 247, 0) 88%),
-    radial-gradient(135% 75% at 50% 48%, #00379a 0%, #002a77 60%, #001d57 100%);
+  background: #001d57 url('assets/bg.png') center / cover no-repeat;
   transform-origin: center center;
   flex: 0 0 auto;
   overflow: hidden;
@@ -202,7 +200,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 20px;
   color: #fff;
@@ -229,7 +227,7 @@ body {
 }
 .diamonds-value {
   position: absolute;
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 600;
   font-size: 20px;
   color: #fff;
@@ -416,7 +414,7 @@ body {
   gap: 3px;
   align-items: center;
   justify-content: center;
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -725,7 +723,7 @@ body {
 .pop {
   position: absolute;
   pointer-events: none;
-  font-family: 'Nunito', sans-serif;
+  font-family: 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 900;
   white-space: nowrap;
   z-index: 1000;
@@ -750,7 +748,7 @@ body {
   z-index: 60;
 }
 .combo-banner .combo-title {
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 46px;
   color: #ffd23f;
@@ -764,7 +762,7 @@ body {
 /* Накопленная сумма под комбо и «летящие» в баланс деньги — общий стиль. */
 .combo-banner .combo-money,
 .combo-fly {
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 700;
   color: #9fe870;
   text-shadow: 0 0 3px #1a3a00, 1px 1px 0 #1a3a00, -1px -1px 0 #1a3a00,
@@ -802,7 +800,7 @@ body {
   line-height: 1;
 }
 .balance-bar .bal-value {
-  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-family: 'Fredoka', 'Roboto Flex', 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 24px;
   color: #fff;
@@ -1007,8 +1005,8 @@ body {
 .hb-avatar { position: absolute; border-radius: 50%; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 .hb-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hb-logo { position: absolute; }
-.hb-title { font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 24px; color: #fff; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
-.hb-subtitle { font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 12px; color: #9db8ef; margin-top: 3px; }
+.hb-title { font-family: 'Roboto Flex', 'Nunito', sans-serif; font-weight: 900; font-size: 24px; color: #fff; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-subtitle { font-family: 'Roboto Flex', 'Nunito', sans-serif; font-weight: 700; font-size: 12px; color: #9db8ef; margin-top: 3px; }
 .hb-iconbtn {
   position: absolute;
   border-radius: 7px;
@@ -1018,7 +1016,7 @@ body {
   cursor: pointer;
 }
 .hb-iconbtn-img { width: 62%; height: 62%; object-fit: contain; display: block; }
-.hb-badge { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #ff3b3b; color: #fff; font: 800 9px/14px 'Nunito', sans-serif; text-align: center; }
+.hb-badge { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #ff3b3b; color: #fff; font: 800 9px/14px 'Roboto Flex', 'Nunito', sans-serif; text-align: center; }
 .hb-settingsbtn { position: absolute; display: flex; align-items: center; justify-content: center; }
 .hb-settingsbtn img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
@@ -1032,20 +1030,20 @@ body {
   border: 1px solid rgba(166, 197, 255, 0.5);
 }
 .hb-card-decor { position: absolute; opacity: 0.12; pointer-events: none; }
-.hb-card-mascot { position: absolute; pointer-events: none; z-index: 2; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4)); }
-.hb-card-label { position: absolute; display: flex; align-items: center; gap: 4px; font: 700 14px 'Nunito', sans-serif; color: #9db8ef; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); z-index: 3; white-space: nowrap; }
+.hb-card-mascot { position: absolute; pointer-events: none; z-index: 2; object-fit: cover; object-position: top center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4)); }
+.hb-card-label { position: absolute; display: flex; align-items: center; gap: 4px; font: 700 14px 'Roboto Flex', 'Nunito', sans-serif; color: #9db8ef; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); z-index: 3; white-space: nowrap; }
 .hb-card-eye { width: 15px; height: 15px; object-fit: contain; display: block; opacity: 0.85; }
 .hb-money-row { position: absolute; display: flex; align-items: center; gap: 6px; z-index: 3; }
 .hb-money-icon { width: 32px; height: 32px; object-fit: contain; display: block; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
-.hb-money-value { font: 900 24px 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+.hb-money-value { font: 900 24px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
 
 /* ── Офферы ────────────────────────────────────────────────────────────────── */
 .hb-offer { position: absolute; border-radius: 16px; cursor: pointer; overflow: hidden; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25)); }
 .hb-offer-sale { background: linear-gradient(180deg, #783ded 0%, #331178 100%); border: 1px solid #9948fd; }
 .hb-offer-ad { background: linear-gradient(180deg, rgba(0, 119, 255, 0.45) 0%, rgba(0, 119, 255, 0) 100%), #0a2a6e; border: 1px solid #1d61c7; }
-.hb-offer-title { position: absolute; top: 2px; left: 0; width: 100%; text-align: center; font: 800 13px/15px 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-offer-title { position: absolute; top: 2px; left: 0; width: 100%; text-align: center; font: 800 13px/15px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
 .hb-offer-art { position: absolute; object-fit: contain; display: block; pointer-events: none; }
-.hb-offer-timer, .hb-offer-adrow { position: absolute; bottom: 3px; left: 0; width: 100%; display: flex; gap: 3px; align-items: center; justify-content: center; font: 700 9px 'Nunito', sans-serif; color: #fff; }
+.hb-offer-timer, .hb-offer-adrow { position: absolute; bottom: 3px; left: 0; width: 100%; display: flex; gap: 3px; align-items: center; justify-content: center; font: 700 9px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; }
 .hb-offer-clock { font-size: 8px; }
 .hb-offer-watch { width: 9px; height: 9px; object-fit: contain; display: block; }
 
@@ -1057,21 +1055,24 @@ body {
   filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25));
 }
 .hb-pill-icon { position: absolute; object-fit: contain; display: block; }
-.hb-pill-label { position: absolute; top: 7px; font: 700 14px 'Nunito', sans-serif; color: #9db8ef; }
-.hb-pill-value { position: absolute; top: 20px; font: 900 20px 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
+.hb-pill-label { position: absolute; top: 7px; font: 700 14px 'Roboto Flex', 'Nunito', sans-serif; color: #9db8ef; }
+.hb-pill-value { position: absolute; top: 20px; font: 900 20px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
 .hb-energy-max { font-size: 14px; color: #9db8ef; }
-.hb-energy-timer { position: absolute; top: -3px; right: 6px; font: 800 10px 'Nunito', sans-serif; color: #fc0; }
+.hb-energy-timer { position: absolute; top: -3px; right: 6px; font: 800 10px 'Roboto Flex', 'Nunito', sans-serif; color: #fc0; }
 
 /* ── Кнопки-бустеры ────────────────────────────────────────────────────────── */
 .hb-booster {
   position: absolute; border-radius: 50%; cursor: pointer;
-  background: linear-gradient(180deg, #004cdd 0%, rgba(10, 32, 75, 0.59) 100%), #152a96;
-  border: 0.7px solid #fff;
+  /* заливка (padding-box) + полупрозрачная градиентная обводка (border-box, светлая сверху → прозрачная снизу) */
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(180deg, #0d44c4 0%, #0b1f4d 100%) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0) 100%) border-box;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
 }
 .hb-booster-gloss { position: absolute; left: 6%; top: 6%; width: 88%; height: 88%; object-fit: contain; display: block; pointer-events: none; }
 .hb-booster-icon { position: absolute; left: 9%; top: 9%; width: 82%; height: 82%; object-fit: contain; display: block; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
-.hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 900 18px 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
+.hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 900 18px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
 
 /* ── Нижнее меню (5 вкладок) ───────────────────────────────────────────────── */
 .hb-nav { position: absolute; }
@@ -1081,9 +1082,12 @@ body {
   border: 2px solid #428eff;
   filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25));
 }
-.hb-nav-sel { position: absolute; width: 71px; height: 71px; border-radius: 16px; border: 2px solid #fee900; box-shadow: 0 0 8px rgba(255, 255, 0, 0.45); }
+.hb-nav-sel {
+  position: absolute; width: 71px; height: 71px; border-radius: 16px;
+  border: 2px solid #fee900; box-shadow: 0 0 8px rgba(255, 255, 0, 0.45);
+  transition: left 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
 .hb-nav-tab { position: absolute; cursor: pointer; }
-.hb-nav-tab.main { cursor: default; }
 .hb-nav-icon { position: absolute; left: 50%; top: 8px; width: 46px; height: 46px; transform: translateX(-50%); object-fit: contain; display: block; }
-.hb-nav-label { position: absolute; left: 0; top: 58px; width: 100%; text-align: center; font: 800 11px 'Nunito', sans-serif; color: rgba(255, 255, 255, 0.5); }
-.hb-nav-tab.main .hb-nav-label { color: #fff; }
+.hb-nav-label { position: absolute; left: 0; top: 58px; width: 100%; text-align: center; font: 800 11px 'Roboto Flex', 'Nunito', sans-serif; color: rgba(255, 255, 255, 0.5); }
+.hb-nav-tab.active .hb-nav-label { color: #fff; }

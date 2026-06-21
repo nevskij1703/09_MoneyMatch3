@@ -18,7 +18,8 @@
     },
     "investmentMultiplier": 1,    // множитель дохода (HUD «Income ×N»; инвестиции/уровень — будущее)
     "level": 1,                   // уровень игрока (HUD «Level»; прокачка — будущее)
-    "energy": 100,                // энергия (HUD «Energy N/100»; трата/реген — будущее)
+    "energy": 100,                // энергия (HUD «Energy N/100»): −costPerMove за ход, +regenAmount/regenSeconds
+    "energyTs": 0,                // якорь регена энергии (мс); 0 → «сейчас» при первом расчёте
     "boosters": { "bomb": 3, "drone": 8, "rocket": 12, "magnet": 0 },
     "totalCollected": 0,          // lifetime собрано (стат + хук прогрессии)
     "bestCombo": 0,               // самый глубокий каскад-комбо (стат)
@@ -37,7 +38,8 @@
   identity (новый проект). `migrationsSelfTest()` (DEV) проверяет реестр без дыр.
 - **`mergeDefaults`** ([storage.ts](../src/core/storage.ts)) при `load()` собирает `data` поле
   за полем по дефолтам и валидации (НЕ spread) — мусор/легаси-поля не утекают. Новые поля
-  (`level`, `energy`) добираются по дефолтам (`balance.startLevel` / `balance.energy.max`).
+  (`level`, `energy`, `energyTs`) добираются по дефолтам; энергия восстанавливается по реальному
+  времени от `energyTs` (см. [core/energy.ts](../src/core/energy.ts)).
   `boosters` пере-сеется по актуальным id (`bomb/drone/rocket/magnet`) — старые ключи отбрасываются.
   Поле берётся из сейва только при совпадении форм-фактора (`cols/rows`); старый **6×6** не
   совпадёт с текущим **6×5** → board регенерится заново (`makeMatch3Board`, живых юзеров нет).

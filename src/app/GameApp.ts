@@ -2,12 +2,13 @@
 //
 // Держит #stage 390×844 с FIT-масштабированием, собирает вью (шапка / карта баланса /
 // офферы / инфо-строка / поле / нижняя зона), пробрасывает сбор каскада в экономику
-// (Баланс) и открывает заглушки разделов. Пассивного дохода/таймеров нет — игра активная.
-// Сохраняем при сборе и на visibility/pagehide.
+// (Баланс) и открывает заглушки разделов. Энергия: тик 1с восстанавливает её по времени
+// и обновляет таймер; ход тратит энергию (нет энергии → свайп заблокирован). UI на английском.
 
 import { getData, save, update } from '../core/storage';
 import { commitMove, comboTotal, tileCollectValue } from '../core/economy';
-import { formatMoney } from '../core/money';
+import { regenEnergy, hasEnergyForMove, spendEnergyForMove } from '../core/energy';
+import { formatMoneyFull } from '../core/money';
 import type { Tier } from '../types';
 import type { BoosterId } from '../core/boosters';
 import { balance } from '../config/balance';
@@ -34,23 +35,25 @@ export class GameApp {
   private comboEl: HTMLDivElement | null = null;
   private moveBaseSum = 0; // накопленная база денег за текущий ход (до комбо-бонуса)
   private moveCombo = 0;   // накопленный уровень комбо за ход (число натуральных матч-групп)
+  private energyTimer: number | null = null;
 
   constructor(private stage: HTMLElement) {
     this.layout();
     window.addEventListener('resize', this.layout);
 
     this.header = new HeaderView(stage, {
-      onBell: () => this.openStub('🔔 Уведомления', 'Уведомления — в разработке. Здесь появятся новости, награды и напоминания.'),
-      onSettings: () => this.openStub('⚙️ Настройки', 'Настройки — в разработке. Звук, вибрация и язык появятся здесь.'),
+      onBell: () => this.openStub('🔔 Notifications', 'Notifications are coming soon — news, rewards and reminders will live here.'),
+      onSettings: () => this.openStub('⚙️ Settings', 'Settings are coming soon — sound, vibration and language.'),
     });
     this.card = new BalanceCardView(stage);
     this.offers = new OffersView(stage, {
-      onSale: () => this.openStub('🐷 SALE', 'Спецпредложение — в разработке. Наборы 💎 со скидкой появятся ближе к релизу.'),
-      onAd: () => this.openStub('▶️ Watch Ad', 'Просмотр рекламы за награду — в разработке. Появится в одной из ближайших итераций.'),
+      onSale: () => this.openStub('🐷 SALE', 'Special offer is coming soon — discounted 💎 packs closer to release.'),
+      onAd: () => this.openStub('▶️ Watch Ad', 'Rewarded video is coming soon — watch an ad for a reward.'),
     });
     this.infoRow = new InfoRowView(stage);
 
     this.board = new BoardView(stage, getData().board, {
+      canMove: () => this.canMove(),
       onCascadeStep: (tiers, groups) => this.onCascadeStep(tiers, groups),
       onMoveEnd: () => this.onMoveEnd(),
       onPersist: () => save(),
@@ -60,6 +63,11 @@ export class GameApp {
       onBooster: (id) => this.onBooster(id),
       onTab: (id) => this.onTab(id),
     });
+
+    // Тик энергии: реген по времени + обновление значения/таймера.
+    regenEnergy(getData(), Date.now());
+    this.infoRow.refresh();
+    this.energyTimer = window.setInterval(this.tickEnergy, 1000);
 
     window.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('pagehide', this.onPageHide);
@@ -76,6 +84,21 @@ export class GameApp {
   };
   private onPageHide = (): void => { save(); };
 
+  /** 1с тик: восстановить энергию по времени и обновить HUD. */
+  private tickEnergy = (): void => {
+    regenEnergy(getData(), Date.now());
+    this.infoRow.refresh();
+  };
+
+  /** Можно ли сделать ход (хватает ли энергии). Нет → пульс пилюли энергии. */
+  private canMove(): boolean {
+    regenEnergy(getData(), Date.now());
+    if (hasEnergyForMove(getData())) return true;
+    this.infoRow.refresh();
+    this.infoRow.pulseEnergy();
+    return false;
+  }
+
   /** Шаг каскада: копим базовую сумму и уровень комбо, обновляем баннер над полем. */
   private onCascadeStep(tiers: Tier[], naturalGroups: number): void {
     const mult = getData().investmentMultiplier;
@@ -84,22 +107,26 @@ export class GameApp {
     if (this.moveCombo >= 1) this.updateCombo(this.moveCombo, comboTotal(this.moveBaseSum, this.moveCombo));
   }
 
-  /** Конец хода (поле перестало матчиться): зачислить накопленное в Баланс с полётом денег. */
+  /** Конец хода (поле перестало матчиться): зачислить накопленное в Баланс + списать энергию. */
   private onMoveEnd(): void {
     const baseSum = this.moveBaseSum;
     const combo = this.moveCombo;
     this.moveBaseSum = 0;
     this.moveCombo = 0;
-    if (baseSum <= 0) { this.clearCombo(); return; } // ход без матчей (откат) — баннера нет
+    if (baseSum <= 0) { this.clearCombo(); return; } // ход без матчей (откат) — энергию не тратим
 
     let gained = 0;
-    update((d) => { gained = commitMove(d, baseSum, combo); });
+    update((d) => {
+      gained = commitMove(d, baseSum, combo);
+      spendEnergyForMove(d, Date.now()); // успешный ход тратит энергию
+    });
+    this.infoRow.refresh();
     if (combo >= 2) this.card.mascotReact();
     this.flyMoneyToBalance(gained); // на прилёте обновит карту-баланс
     save();
   }
 
-  /** Создать/обновить баннер «Комбо ×N» + сумму $ под ним (нарастает по ходу). level ≥ 1. */
+  /** Создать/обновить баннер «Combo ×N» + сумму $ под ним (нарастает по ходу). level ≥ 1. */
   private updateCombo(level: number, total: number): void {
     if (!this.comboEl) {
       const root = document.createElement('div');
@@ -111,10 +138,10 @@ export class GameApp {
     }
     const title = this.comboEl.querySelector('.combo-title') as HTMLDivElement;
     const money = this.comboEl.querySelector('.combo-money') as HTMLDivElement;
-    title.textContent = `Комбо ×${level}`;
+    title.textContent = `Combo ×${level}`;
     title.style.fontSize = `${40 + Math.min(level, 8) * 3}px`;
     title.style.color = level >= 5 ? '#ff5252' : level >= 3 ? '#ff9f1c' : '#ffd23f';
-    money.textContent = `$${formatMoney(total)}`;
+    money.textContent = `$${formatMoneyFull(total)}`;
     this.comboEl.animate(
       [{ transform: 'translate(-50%,0) scale(1.14)' }, { transform: 'translate(-50%,0) scale(1)' }],
       { duration: 220, easing: 'cubic-bezier(0.34,1.56,0.64,1)' },
@@ -138,7 +165,7 @@ export class GameApp {
     const dx = MONEY_TARGET.x - startX, dy = MONEY_TARGET.y - startY;
     const fly = el('div', {
       cls: 'combo-fly',
-      text: `+$${formatMoney(amount)}`,
+      text: `+$${formatMoneyFull(amount)}`,
       style: `left:${startX}px;top:${startY}px;`,
       parent: this.stage,
     });
@@ -160,17 +187,17 @@ export class GameApp {
   private onBooster(id: BoosterId): void {
     const def = balance.boosters.definitions.find((b) => b.id === id);
     this.openStub(
-      `${def?.glyph ?? '🎁'} ${def?.name ?? 'Бустер'}`,
-      'Бустер — в разработке. Будет давать эффект на поле (взрыв, ряд/столбец, сбор тира и т.п.). Появится в одной из ближайших итераций.',
+      `${def?.glyph ?? '🎁'} ${def?.name ?? 'Booster'}`,
+      'This booster is coming soon — it will affect the board (blast, clear a row/column, collect a tier, etc.).',
     );
   }
 
   private onTab(id: TabId): void {
     const stubs: Record<TabId, [string, string]> = {
-      build: ['🔨 Постройка', 'Постройка — в разработке. Здесь будешь строить и улучшать свой банк.'],
-      tasks: ['📋 Задачи', 'Задачи — в разработке. Ежедневные цели и награды появятся позже.'],
-      collections: ['🗂️ Коллекции', 'Коллекции — в разработке. Собирай наборы и получай бонусы.'],
-      shop: ['🛒 Магазин', 'Магазин — в разработке. Пополнение 💎 и бустер-паки появятся ближе к релизу.'],
+      build: ['🔨 Build', 'Build is coming soon — construct and upgrade your bank here.'],
+      tasks: ['📋 Tasks', 'Tasks are coming soon — daily goals and rewards.'],
+      collections: ['🗂️ Collections', 'Collections are coming soon — gather sets and earn bonuses.'],
+      shop: ['🛒 Shop', 'Shop is coming soon — 💎 top-ups and booster packs closer to release.'],
     };
     const [title, msg] = stubs[id];
     this.openStub(title, msg);
@@ -184,6 +211,7 @@ export class GameApp {
     window.removeEventListener('resize', this.layout);
     window.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pagehide', this.onPageHide);
+    if (this.energyTimer !== null) window.clearInterval(this.energyTimer);
     this.board.destroy();
   }
 }

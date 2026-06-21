@@ -1,8 +1,9 @@
 // Нижняя зона экрана Hamster Bank:
 //   • ряд из 4 круглых КНОПОК-БУСТЕРОВ (bomb/drone/rocket/magnet) со счётчиком из сейва;
-//   • нижнее меню из 5 вкладок: Постройка / Задачи / Игра (центр, активна) / Коллекции / Магазин.
-// Бустеры теперь кнопки и на поле НЕ спавнятся; эффекты бустеров и окна вкладок — будущее
-// (тап → заглушка). Координаты — дизайн-холст 390×844 (макет «Play window»).
+//   • нижнее меню из 5 вкладок: Build / Tasks / Play / Collections / Shop.
+// Бустеры — кнопки (на поле НЕ спавнятся); эффекты и окна вкладок — будущее (тап → заглушка).
+// Жёлтое выделение «переезжает» на нажатую вкладку (даже если окно — заглушка).
+// Координаты — дизайн-холст 390×844 (макет «Play window»). UI на английском.
 
 import { getData } from '../../core/storage';
 import { balance } from '../../config/balance';
@@ -25,17 +26,20 @@ const BOOSTER_LEFT = 49; // 4×64 + 3×12 центрируется в 390
 
 const NAV_TOP = 752;
 const TAB_W = 78;
+const SEL_W = 71;
 
 const TABS: { id: TabId | 'play'; icon: string; label: string }[] = [
-  { id: 'build', icon: 'build.png', label: 'Постройка' },
-  { id: 'tasks', icon: 'tasks.png', label: 'Задачи' },
-  { id: 'play', icon: 'play.png', label: 'Игра' },
-  { id: 'collections', icon: 'build.png', label: 'Коллекции' }, // иконка-заглушка (в макете арт коллекций ещё нет)
-  { id: 'shop', icon: 'shop.png', label: 'Магазин' },
+  { id: 'build', icon: 'build.png', label: 'Build' },
+  { id: 'tasks', icon: 'tasks.png', label: 'Tasks' },
+  { id: 'play', icon: 'play.png', label: 'Play' },
+  { id: 'collections', icon: 'build.png', label: 'Collections' }, // иконка-заглушка (арт коллекций в макете нет)
+  { id: 'shop', icon: 'shop.png', label: 'Shop' },
 ];
 
 export class ActionBarView {
   private boosters: BoosterUi[] = [];
+  private sel!: HTMLDivElement;
+  private tabEls: HTMLDivElement[] = [];
 
   constructor(stage: HTMLElement, private callbacks: ActionBarCallbacks) {
     this.buildBoosters(stage);
@@ -65,20 +69,34 @@ export class ActionBarView {
   private buildNav(stage: HTMLElement): void {
     const nav = el('div', { cls: 'hb-nav', style: `left:0;top:${NAV_TOP}px;width:390px;height:92px;`, parent: stage });
     el('div', { cls: 'hb-nav-base', parent: nav });
-    // Жёлтое выделение позади центральной вкладки «Игра».
-    el('div', { cls: 'hb-nav-sel', style: `left:${2 * TAB_W + (TAB_W - 71) / 2}px;top:6px;`, parent: nav });
+    this.sel = el('div', { cls: 'hb-nav-sel', style: `left:${this.selLeft(2)}px;top:6px;`, parent: nav });
 
     TABS.forEach((t, i) => {
       const tab = el('div', {
-        cls: t.id === 'play' ? 'hb-nav-tab main' : 'hb-nav-tab',
+        cls: 'hb-nav-tab',
         style: `left:${i * TAB_W}px;top:0;width:${TAB_W}px;height:92px;`,
         parent: nav,
       });
       const icon = el('img', { cls: 'hb-nav-icon', parent: tab }) as HTMLImageElement;
       icon.src = `assets/nav/${t.icon}`; icon.alt = ''; icon.draggable = false;
       el('div', { cls: 'hb-nav-label', text: t.label, parent: tab });
-      if (t.id !== 'play') tab.addEventListener('pointerup', () => this.callbacks.onTab(t.id as TabId));
+      tab.addEventListener('pointerup', () => {
+        this.selectTab(i);                                   // жёлтое выделение переезжает
+        if (t.id !== 'play') this.callbacks.onTab(t.id);     // окно-заглушка (Play — текущий экран)
+      });
+      this.tabEls.push(tab);
     });
+    this.selectTab(2); // старт — «Play»
+  }
+
+  /** Перевести жёлтое выделение на вкладку i (анимация — CSS transition на left). */
+  private selectTab(i: number): void {
+    this.sel.style.left = `${this.selLeft(i)}px`;
+    this.tabEls.forEach((tab, k) => tab.classList.toggle('active', k === i));
+  }
+
+  private selLeft(i: number): number {
+    return i * TAB_W + (TAB_W - SEL_W) / 2;
   }
 
   refresh(): void {

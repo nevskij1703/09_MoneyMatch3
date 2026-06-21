@@ -63,8 +63,12 @@ export interface Balance {
   energy: {
     /** Максимум энергии (HUD «N/max»). */
     max: number;
-    /** Секунд на восстановление 1 энергии (показ таймера; реген/трата — будущее). */
+    /** Сколько энергии восстанавливается за один интервал регена. */
+    regenAmount: number;
+    /** Длительность интервала регена в секундах (+regenAmount каждые regenSeconds). */
     regenSeconds: number;
+    /** Сколько энергии тратится за один ход (успешный свап с матчем). */
+    costPerMove: number;
   };
   boosters: {
     /** 4 бустера-кнопки (bomb/drone/rocket/magnet; эффекты — будущее). На поле НЕ спавнятся. */
@@ -106,16 +110,18 @@ export const balance: Balance = {
   startLevel: 1,
   energy: {
     max: 100,
-    regenSeconds: 600,
+    regenAmount: 10,   // +10 энергии…
+    regenSeconds: 600, // …каждые 10 минут
+    costPerMove: 1,    // −1 за ход (успешный свап с матчем)
   },
   boosters: {
     // Кнопки-бустеры (реальные эффекты — будущая фаза). Иконки — public/assets/boosters/<id>.png.
-    // glyph — эмодзи-фолбэк. starterCount подобран под демо-вид макета.
+    // glyph — эмодзи-фолбэк. starterCount подобран под демо-вид макета. Имена — англ. (UI на англ.).
     definitions: [
-      { id: 'bomb',   name: 'Бомба',  glyph: '💣', starterCount: 3 },
-      { id: 'drone',  name: 'Дрон',   glyph: '🛸', starterCount: 8 },
-      { id: 'rocket', name: 'Ракета', glyph: '🚀', starterCount: 12 },
-      { id: 'magnet', name: 'Магнит', glyph: '🧲', starterCount: 0 },
+      { id: 'bomb',   name: 'Bomb',   glyph: '💣', starterCount: 3 },
+      { id: 'drone',  name: 'Drone',  glyph: '🛸', starterCount: 8 },
+      { id: 'rocket', name: 'Rocket', glyph: '🚀', starterCount: 12 },
+      { id: 'magnet', name: 'Magnet', glyph: '🧲', starterCount: 0 },
     ],
   },
 };

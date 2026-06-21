@@ -48,6 +48,15 @@ export function formatMoney(v: number): string {
 }
 
 /**
+ * Полное число БЕЗ сокращений (все знаки), группировка неразрывными пробелами: «2 450 000».
+ * Для главного Баланса / комбо / полёта денег (UI сам уменьшает шрифт, если не влезает).
+ */
+export function formatMoneyFull(v: number): string {
+  if (!Number.isFinite(v)) return '∞';
+  return Math.round(v).toLocaleString('en-US').replace(/,/g, ' ');
+}
+
+/**
  * То же что formatMoney, но для мелких сумм показывает дробную часть с центами:
  *   $0..$99    → 2 знака после запятой ($0.05, $99.99)
  *   $100..$999 → 1 знак ($123.5)

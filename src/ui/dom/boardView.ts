@@ -17,6 +17,8 @@ import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
 export interface BoardViewCallbacks {
+  /** Можно ли сделать ход (хватает ли энергии). false → свайп игнорируется. */
+  canMove(): boolean;
   /** Шаг каскада схлопнут: tiers — схлопнутые тиры (накопление денег), naturalGroups —
    *  число натуральных матч-групп в шаге (для комбо). */
   onCascadeStep(tiers: Tier[], naturalGroups: number): void;
@@ -199,6 +201,7 @@ export class BoardView {
 
   private async trySwap(a: number, b: number): Promise<void> {
     if (this.busy || !areOrthoNeighbors(a, b, this.field.cols)) return;
+    if (!this.callbacks.canMove()) return; // нет энергии — ход недоступен
     this.busy = true;
 
     if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
