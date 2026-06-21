@@ -27,15 +27,21 @@ export class BalanceCardView {
   constructor(stage: HTMLElement) {
     const card = el('div', { cls: 'hb-card', style: 'left:9px;top:112px;width:293px;height:158px;', parent: stage });
 
-    // Фон карты (градиент + внутр. glow) + клипованный декор.
+    // Фон карты (градиент + внутр. glow) + приглушённый декор: график + раскиданные купюры.
     const bg = el('div', { cls: 'hb-card-bg', parent: card });
-    const chart = el('img', { cls: 'hb-card-decor', style: 'left:96px;top:78px;width:97px;height:97px;', parent: bg }) as HTMLImageElement;
+    const chart = el('img', { cls: 'hb-card-decor', style: 'left:92px;top:66px;width:106px;', parent: bg }) as HTMLImageElement;
     chart.src = 'assets/decor/chart.png'; chart.alt = ''; chart.draggable = false;
-    const bills = el('img', { cls: 'hb-card-decor', style: 'left:150px;top:8px;width:46px;height:46px;transform:rotate(-12deg);', parent: bg }) as HTMLImageElement;
-    bills.src = 'assets/decor/bills.png'; bills.alt = ''; bills.draggable = false;
+    // Купюры по одной, в разных местах/поворотах (height auto — без искажений).
+    const billSpots: [number, number, number, number][] = [
+      [128, 10, 34, -18], [74, 58, 30, 10], [156, 96, 33, -8], [20, 108, 27, 16], [190, 36, 26, -3], [44, 18, 24, 6],
+    ];
+    for (const [x, y, w, rot] of billSpots) {
+      const bill = el('img', { cls: 'hb-card-decor', style: `left:${x}px;top:${y}px;width:${w}px;transform:rotate(${rot}deg);`, parent: bg }) as HTMLImageElement;
+      bill.src = 'assets/decor/bills.png'; bill.alt = ''; bill.draggable = false;
+    }
 
-    // Маскот-хомяк: крупнее и обрезан по пояс (object-fit cover + object-position top).
-    this.mascot = el('img', { cls: 'hb-card-mascot', style: 'left:150px;top:-42px;width:176px;height:182px;', parent: card }) as HTMLImageElement;
+    // Маскот-хомяк: крупный, обрезан по пояс (cover+top), низ касается низа карты.
+    this.mascot = el('img', { cls: 'hb-card-mascot', style: 'left:150px;top:-24px;width:176px;height:182px;', parent: card }) as HTMLImageElement;
     this.mascot.src = 'assets/char/hamster.png'; this.mascot.alt = ''; this.mascot.draggable = false;
 
     // «Total balance» + 👁.

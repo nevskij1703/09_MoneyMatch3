@@ -200,7 +200,8 @@ export class GameApp {
       shop: ['🛒 Shop', 'Shop is coming soon — 💎 top-ups and booster packs closer to release.'],
     };
     const [title, msg] = stubs[id];
-    this.openStub(title, msg);
+    this.actionBar.highlight(id); // выделение переезжает на вкладку, пока открыт попап…
+    openStubModal(title, msg, { onClose: () => this.actionBar.highlight('play') }); // …и возвращается на Play
   }
 
   private openStub(title: string, message: string): void {

@@ -814,11 +814,11 @@ body {
   box-shadow: inset 0 0 0 2px #ffd23f;
 }
 
-/* Бустеры — самостоятельные объекты на поле (💣 / 🚀 / 🧲): фон-чип + пульс-рамка + значок. */
-.board-tile.booster {
+/* Бустеры на поле (из сложного матча: 💣 / 🚀 / 🧲): чип-подложка + пульс-рамка + PNG-иконка. */
+.board-tile.board-booster {
   z-index: 3;
 }
-.board-tile.booster::before {
+.board-tile.board-booster::before {
   /* тёмный чип-подложка — бустер читается как отдельный объект, не плитка */
   content: '';
   position: absolute;
@@ -827,7 +827,7 @@ body {
   background: radial-gradient(circle at 50% 36%, #2b3550, #151b2b);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.22), 0 2px 5px rgba(0, 0, 0, 0.45);
 }
-.board-tile.booster::after {
+.board-tile.board-booster::after {
   /* пульсирующая цветная рамка (цвет — по типу бустера) */
   content: '';
   position: absolute;
@@ -836,30 +836,31 @@ body {
   pointer-events: none;
   animation: special-pulse 1s ease-in-out infinite;
 }
-.board-tile.booster-bomb::after   { box-shadow: 0 0 0 2px #ff7043, 0 0 12px 2px rgba(255, 112, 67, 0.85); }
-.board-tile.booster-rocket::after { box-shadow: 0 0 0 2px #29b6f6, 0 0 12px 2px rgba(41, 182, 246, 0.85); }
-.board-tile.booster-magnet::after { box-shadow: 0 0 0 2px #ab47bc, 0 0 12px 2px rgba(171, 71, 188, 0.9); }
+.board-booster-bomb::after   { box-shadow: 0 0 0 2px #ff7043, 0 0 12px 2px rgba(255, 112, 67, 0.85); }
+.board-booster-rocket::after { box-shadow: 0 0 0 2px #29b6f6, 0 0 12px 2px rgba(41, 182, 246, 0.85); }
+.board-booster-magnet::after { box-shadow: 0 0 0 2px #ab47bc, 0 0 12px 2px rgba(171, 71, 188, 0.9); }
 @keyframes special-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
-.booster-glyph {
+.board-booster-icon {
   position: absolute;
   left: 50%;
   top: 50%;
+  width: 76%;
+  height: 76%;
   transform: translate(-50%, -50%);
-  line-height: 1;
+  object-fit: contain;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
   pointer-events: none;
   z-index: 2;
 }
-/* Стрелки ориентации ракеты (⇆ ряд / ⇅ столбец). */
-.booster-dir {
+/* Стрелка ориентации ракеты (⇆ ряд / ⇅ столбец). */
+.board-booster-dir {
   position: absolute;
   right: 5%;
   bottom: 2%;
-  font-size: 13px;
-  font-weight: 800;
+  font: 800 13px 'Roboto Flex', sans-serif;
   color: #d4efff;
   line-height: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
@@ -1005,7 +1006,7 @@ body {
 .hb-avatar { position: absolute; border-radius: 50%; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 .hb-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hb-logo { position: absolute; }
-.hb-title { font-family: 'Roboto Flex', 'Nunito', sans-serif; font-weight: 900; font-size: 24px; color: #fff; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-title { font-family: 'Roboto Flex', 'Nunito', sans-serif; font-weight: 700; font-size: 24px; color: #fff; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
 .hb-subtitle { font-family: 'Roboto Flex', 'Nunito', sans-serif; font-weight: 700; font-size: 12px; color: #9db8ef; margin-top: 3px; }
 .hb-iconbtn {
   position: absolute;
@@ -1029,21 +1030,21 @@ body {
     linear-gradient(180deg, #0059cd 0%, #012871 100%);
   border: 1px solid rgba(166, 197, 255, 0.5);
 }
-.hb-card-decor { position: absolute; opacity: 0.12; pointer-events: none; }
+.hb-card-decor { position: absolute; opacity: 0.12; pointer-events: none; object-fit: contain; }
 .hb-card-mascot { position: absolute; pointer-events: none; z-index: 2; object-fit: cover; object-position: top center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4)); }
-.hb-card-label { position: absolute; display: flex; align-items: center; gap: 4px; font: 700 14px 'Roboto Flex', 'Nunito', sans-serif; color: #9db8ef; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); z-index: 3; white-space: nowrap; }
+.hb-card-label { position: absolute; display: flex; align-items: center; gap: 4px; font: 500 14px 'Roboto Flex', 'Nunito', sans-serif; color: #9db8ef; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); z-index: 3; white-space: nowrap; }
 .hb-card-eye { width: 15px; height: 15px; object-fit: contain; display: block; opacity: 0.85; }
 .hb-money-row { position: absolute; display: flex; align-items: center; gap: 6px; z-index: 3; }
 .hb-money-icon { width: 32px; height: 32px; object-fit: contain; display: block; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
-.hb-money-value { font: 900 24px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
+.hb-money-value { font: 700 24px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
 
 /* ── Офферы ────────────────────────────────────────────────────────────────── */
 .hb-offer { position: absolute; border-radius: 16px; cursor: pointer; overflow: hidden; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25)); }
 .hb-offer-sale { background: linear-gradient(180deg, #783ded 0%, #331178 100%); border: 1px solid #9948fd; }
 .hb-offer-ad { background: linear-gradient(180deg, rgba(0, 119, 255, 0.45) 0%, rgba(0, 119, 255, 0) 100%), #0a2a6e; border: 1px solid #1d61c7; }
-.hb-offer-title { position: absolute; top: 2px; left: 0; width: 100%; text-align: center; font: 800 13px/15px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.hb-offer-title { position: absolute; top: 2px; left: 0; width: 100%; text-align: center; font: 600 13px/15px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
 .hb-offer-art { position: absolute; object-fit: contain; display: block; pointer-events: none; }
-.hb-offer-timer, .hb-offer-adrow { position: absolute; bottom: 3px; left: 0; width: 100%; display: flex; gap: 3px; align-items: center; justify-content: center; font: 700 9px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; }
+.hb-offer-timer, .hb-offer-adrow { position: absolute; bottom: 3px; left: 0; width: 100%; display: flex; gap: 3px; align-items: center; justify-content: center; font: 600 9px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; }
 .hb-offer-clock { font-size: 8px; }
 .hb-offer-watch { width: 9px; height: 9px; object-fit: contain; display: block; }
 
@@ -1056,9 +1057,9 @@ body {
 }
 .hb-pill-icon { position: absolute; object-fit: contain; display: block; }
 .hb-pill-label { position: absolute; top: 7px; font: 700 14px 'Roboto Flex', 'Nunito', sans-serif; color: #9db8ef; }
-.hb-pill-value { position: absolute; top: 20px; font: 900 20px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
-.hb-energy-max { font-size: 14px; color: #9db8ef; }
-.hb-energy-timer { position: absolute; top: -3px; right: 6px; font: 800 10px 'Roboto Flex', 'Nunito', sans-serif; color: #fc0; }
+.hb-pill-value { position: absolute; top: 20px; font: 700 20px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); white-space: nowrap; }
+.hb-energy-max { font-size: 14px; font-weight: 700; color: #9db8ef; }
+.hb-energy-timer { position: absolute; top: -3px; right: 6px; font: 700 10px 'Roboto Flex', 'Nunito', sans-serif; color: #fc0; }
 
 /* ── Кнопки-бустеры ────────────────────────────────────────────────────────── */
 .hb-booster {
@@ -1072,7 +1073,7 @@ body {
 }
 .hb-booster-gloss { position: absolute; left: 6%; top: 6%; width: 88%; height: 88%; object-fit: contain; display: block; pointer-events: none; }
 .hb-booster-icon { position: absolute; left: 9%; top: 9%; width: 82%; height: 82%; object-fit: contain; display: block; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
-.hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 900 18px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
+.hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 700 20px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
 
 /* ── Нижнее меню (5 вкладок) ───────────────────────────────────────────────── */
 .hb-nav { position: absolute; }

@@ -2,15 +2,19 @@
 //
 // Ввод: игрок ЗАЖИМАЕТ плитку и СВАЙПАЕТ к ортогональному соседу → они меняются местами.
 // Если обмен создал линию 3+ или квадрат 2×2 — поле разрешается каскадами (схлоп → деньги
-// в Баланс → гравитация и досыпка → повтор, комбо растёт). Свап без матча откатывается.
-// БУСТЕРЫ на поле НЕ спавнятся (теперь это кнопки внизу — actionBarView). Логика поля —
-// pure-функции core/match3.ts; здесь — ввод и анимации. Координаты — дизайн-холст 390×844.
+// в Баланс → бустеры за СЛОЖНЫЙ матч (T/L → 💣, 2×2 → 🚀, линия-5 → 🧲) → гравитация и
+// досыпка → повтор, комбо растёт). Свайп бустера с любым соседом «применяет» его (оба бустера
+// срабатывают, если свайпнуты друг с другом). Свап без матча откатывается. Бустеры на поле — ДА
+// (плюс есть кнопки-бустеры внизу). Логика поля — core/match3.ts; здесь — ввод и анимации.
 
-import type { FieldState, Tier } from '../../types';
+import type { FieldState, Tier, SpecialKind } from '../../types';
 import type { CascadeStep } from '../../core/match3';
-import { idxToXY, isValidTier, xyToIdx } from '../../core/board';
+import { idxToXY, isValidTier, xyToIdx, getSpecial } from '../../core/board';
 import { balance } from '../../config/balance';
-import { areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep, hasAnyValidMove } from '../../core/match3';
+import {
+  areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep,
+  boosterTargets, pickNearestTileTier, expandClearWithSpecials, hasAnyValidMove,
+} from '../../core/match3';
 import { shuffleBoard } from '../../core/boosters';
 import { el, centerTransform } from './dom';
 import { makeTierIcon } from './tierArt';
@@ -95,13 +99,16 @@ export class BoardView {
     }
   }
 
-  /** Полный rebuild всех плиток по field. */
+  /** Полный rebuild всех объектов по field (плитки + бустеры на поле). */
   rebuildTiles(): void {
     for (const t of this.tileByIndex.values()) t.remove();
     this.tileByIndex.clear();
+    const sp = getSpecial(this.field);
     for (let i = 0; i < this.field.cells.length; i++) {
+      const kind = sp[i];
       const cell = this.field.cells[i];
-      if (isValidTier(cell)) this.tileByIndex.set(i, this.makeTile(i, cell));
+      if (kind) this.tileByIndex.set(i, this.makeBoosterTile(i, kind));
+      else if (isValidTier(cell)) this.tileByIndex.set(i, this.makeTile(i, cell));
     }
     this.clearSelection();
   }
@@ -124,6 +131,24 @@ export class BoardView {
 
     el('div', { cls: 'tier-glow', parent: tile });
 
+    this.panel.appendChild(tile);
+    return tile;
+  }
+
+  /** Создать бустер-объект на поле (PNG-иконка + пульс-рамка; ⇆/⇅ для ракеты). */
+  private makeBoosterTile(idx: number, kind: SpecialKind): HTMLElement {
+    const c = this.cellCenter(idx);
+    const base = kind === 'bomb' ? 'bomb' : kind === 'magnet' ? 'magnet' : 'rocket';
+    const tile = el('div', {
+      cls: `board-tile board-booster board-booster-${base}`,
+      style: `left:0;top:0;width:${this.cellW}px;height:${this.cellH}px;transform:${centerTransform(c.x, c.y, 1)};`,
+    });
+    tile.dataset.booster = kind;
+    const icon = el('img', { cls: 'board-booster-icon', parent: tile }) as HTMLImageElement;
+    icon.src = `assets/boosters/${base}.png`; icon.alt = ''; icon.draggable = false;
+    if (kind === 'rocket-h' || kind === 'rocket-v') {
+      el('div', { cls: 'board-booster-dir', text: kind === 'rocket-h' ? '⇆' : '⇅', parent: tile });
+    }
     this.panel.appendChild(tile);
     return tile;
   }
@@ -204,12 +229,36 @@ export class BoardView {
     if (!this.callbacks.canMove()) return; // нет энергии — ход недоступен
     this.busy = true;
 
-    if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
+    const sp = getSpecial(this.field);
+    const aSpec = sp[a];
+    const bSpec = sp[b];
+
+    if (aSpec || bSpec) {
+      // Свайп бустера активирует его (матч не нужен). Оба бустера → оба срабатывают.
+      // Магнит: цель = тир соседней плитки, иначе (сосед — бустер) случайная ближайшая плитка.
+      const seed = new Set<number>();
+      const fired = new Set<number>();
+      const fire = (self: number, partner: number): void => {
+        let target: Tier | null = null;
+        if (sp[self] === 'magnet') {
+          const partnerTier = this.field.cells[partner];
+          target = isValidTier(partnerTier) ? partnerTier : pickNearestTileTier(this.field, self, Math.random);
+        }
+        fired.add(self);
+        for (const c of boosterTargets(this.field, self, target)) seed.add(c);
+      };
+      if (aSpec) fire(a, b);
+      if (bSpec) fire(b, a);
+      expandClearWithSpecials(this.field, seed, Math.random, fired); // цепная реакция остальных
+      const seedStep = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+      await this.animateStep(seedStep);
+      await this.runNaturalCascade();
+    } else if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
       // Обмен: меняем, проверяем матч, при отсутствии — откат.
       swapCells(this.field, a, b);
       await this.swapTilesVisual(a, b);
       if (hasMatchAny(this.field)) {
-        await this.runNaturalCascade();
+        await this.runNaturalCascade([a, b]);
       } else {
         swapCells(this.field, a, b);
         await this.swapTilesVisual(a, b); // анимация назад
@@ -236,20 +285,22 @@ export class BoardView {
   }
 
   /**
-   * Каскад натуральных матчей поля. Комбо считается по числу матч-групп каждого шага
-   * (см. GameApp.onCascadeStep); петля идёт пока есть матчи.
+   * Каскад натуральных матчей поля; `moved` — клетки свапа (anchor спавна бустера на 1-м шаге).
+   * Комбо считается по числу матч-групп каждого шага (см. GameApp.onCascadeStep).
    */
-  private async runNaturalCascade(): Promise<void> {
+  private async runNaturalCascade(moved?: number[]): Promise<void> {
+    let first = true;
     while (true) {
-      const s = resolveStep(this.field, balance.tierCount, Math.random);
+      const s = resolveStep(this.field, balance.tierCount, Math.random, first ? moved : undefined);
+      first = false;
       if (!s) break;
       await this.animateStep(s);
     }
   }
 
-  /** Анимация одного шага каскада: pop схлопнутых → гравитация/досыпка. */
+  /** Анимация одного шага каскада: pop схлопнутых → спавн бустеров → гравитация/досыпка. */
   private async animateStep(step: CascadeStep): Promise<void> {
-    const center = this.centroidOf(step.cleared);
+    const center = this.centroidOf(step.cleared.length ? step.cleared : step.spawns.map((s) => s.idx));
 
     // 1) Pop схлопнутых плиток.
     step.cleared.forEach((idx, k) => {
@@ -271,6 +322,23 @@ export class BoardView {
 
     // 2) Передать шаг в GameApp для накопления денег + комбо (показ — над полем).
     this.callbacks.onCascadeStep(step.clearedTiers, step.groups);
+
+    // 2.5) Anchor-клетки сложных матчей становятся бустерами на поле (заменяем плитку объектом).
+    for (const s of step.spawns) {
+      const old = this.tileByIndex.get(s.idx);
+      if (old) old.remove();
+      const tile = this.makeBoosterTile(s.idx, s.kind);
+      this.tileByIndex.set(s.idx, tile);
+      const c = this.cellCenter(s.idx);
+      tile.animate(
+        [
+          { transform: centerTransform(c.x, c.y, 0.2), opacity: 0 },
+          { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
+          { transform: centerTransform(c.x, c.y, 1) },
+        ],
+        { duration: 280, easing: EASE_OUT },
+      );
+    }
 
     // 3) Гравитация (падения уцелевших) + досыпка сверху.
     const oldMap = this.tileByIndex;

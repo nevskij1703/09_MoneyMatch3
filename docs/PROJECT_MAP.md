@@ -5,8 +5,8 @@
 **Игра:** f2p **классический match-3**, бренд экрана **«Hamster Bank»** (синяя тема, маскот-хомяк).
 Игрок **свайпает** — меняет местами две ортогонально соседние плитки; линии ≥ `minLine` (=3) и
 квадраты 2×2 одного тира авто-схлопываются в **Баланс**; гравитация досыпает новые плитки —
-каскадами, пока есть матчи (комбо растёт). Свап без матча откатывается. Поле **6×5**. Бустеры —
-**кнопки-инвентарь** под полем (на поле НЕ спавнятся). Над полем — карта баланса с маскотом,
+каскадами, пока есть матчи (комбо растёт). Свап без матча откатывается. Поле **6×5**. Сложный матч
+рождает **бустер на поле** (T/L→💣, 2×2→🚀, линия-5→🧲); плюс **кнопки-бустеры** внизу. Над полем — карта баланса с маскотом,
 офферы (SALE / Watch Ad), строка Level / Energy / Income. Снизу — меню из 5 вкладок.
 
 > Кодовая база/сейв — `MoneyMatch3` / `mmatch_save`. «Hamster Bank» — отображаемый бренд
@@ -48,7 +48,7 @@ src/
 │
 ├── core/                    ЛОГИКА (pure, без DOM)
 │   ├── board.ts             isValidTier, idxToXY/xyToIdx, getSpecial, makeBoard
-│   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (только схлоп, spawns=[]),
+│   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (схлоп + спавн бустеров за сложный матч),
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill,
 │   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
 │   │                        (заготовки эффектов бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials)
@@ -92,7 +92,7 @@ src/
 1. [boardView.ts](../src/ui/dom/boardView.ts) `pointerdown` запоминает клетку, `pointermove` за
    порогом определяет соседа → `trySwap(a,b)`: `swapCells` + `hasMatchAny` (нет матча → откат назад).
 2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: обнуление, `applyGravityAndRefill`)
-   пока есть матчи. `step.groups` = число матч-групп шага (`countMatchGroups`). Бустеры на поле не рождаются.
+   пока есть матчи. `step.groups` = число матч-групп шага (`countMatchGroups`). Сложный матч → бустер на поле.
 3. На каждом шаге `onCascadeStep(tiers, groups)` → [GameApp](../src/app/GameApp.ts) копит `baseSum`
    + уровень комбо (Σ групп), обновляет баннер «Комбо ×N» + сумму $ (`updateCombo`).
 4. Анимация шага: pop схлопнутых + падение уцелевших + досыпка (WAAPI).

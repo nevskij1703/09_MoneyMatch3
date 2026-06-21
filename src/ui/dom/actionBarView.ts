@@ -25,7 +25,9 @@ const BOOSTER_STRIDE = 76;
 const BOOSTER_LEFT = 49; // 4×64 + 3×12 центрируется в 390
 
 const NAV_TOP = 752;
-const TAB_W = 78;
+const NAV_BASE_LEFT = 8;          // совпадает с .hb-nav-base (left:8, right:8)
+const NAV_BASE_W = 390 - 8 * 2;   // 374 — ширина подложки меню
+const TAB_W = NAV_BASE_W / 5;     // вкладки распределены по ширине ПОДЛОЖКИ, не всего экрана
 const SEL_W = 71;
 
 const TABS: { id: TabId | 'play'; icon: string; label: string }[] = [
@@ -74,29 +76,29 @@ export class ActionBarView {
     TABS.forEach((t, i) => {
       const tab = el('div', {
         cls: 'hb-nav-tab',
-        style: `left:${i * TAB_W}px;top:0;width:${TAB_W}px;height:92px;`,
+        style: `left:${NAV_BASE_LEFT + i * TAB_W}px;top:0;width:${TAB_W}px;height:92px;`,
         parent: nav,
       });
       const icon = el('img', { cls: 'hb-nav-icon', parent: tab }) as HTMLImageElement;
       icon.src = `assets/nav/${t.icon}`; icon.alt = ''; icon.draggable = false;
       el('div', { cls: 'hb-nav-label', text: t.label, parent: tab });
-      tab.addEventListener('pointerup', () => {
-        this.selectTab(i);                                   // жёлтое выделение переезжает
-        if (t.id !== 'play') this.callbacks.onTab(t.id);     // окно-заглушка (Play — текущий экран)
-      });
+      // Выделением управляет GameApp (переезжает на время открытого окна, потом — обратно на Play).
+      tab.addEventListener('pointerup', () => { if (t.id !== 'play') this.callbacks.onTab(t.id); });
       this.tabEls.push(tab);
     });
-    this.selectTab(2); // старт — «Play»
+    this.highlight('play'); // старт — «Play»
   }
 
-  /** Перевести жёлтое выделение на вкладку i (анимация — CSS transition на left). */
-  private selectTab(i: number): void {
+  /** Перевести жёлтое выделение на вкладку id (анимация — CSS transition на left). */
+  highlight(id: TabId | 'play'): void {
+    const i = TABS.findIndex((t) => t.id === id);
+    if (i < 0) return;
     this.sel.style.left = `${this.selLeft(i)}px`;
     this.tabEls.forEach((tab, k) => tab.classList.toggle('active', k === i));
   }
 
   private selLeft(i: number): number {
-    return i * TAB_W + (TAB_W - SEL_W) / 2;
+    return NAV_BASE_LEFT + i * TAB_W + (TAB_W - SEL_W) / 2;
   }
 
   refresh(): void {
