@@ -228,6 +228,52 @@ export function pickNearestTileTier(field: FieldState, idx: number, rng: () => n
   return bucket[Math.floor(rng() * bucket.length)];
 }
 
+// ─── Геометрия зон (для комбо-эффектов бустеров) ─────────────────────────────────
+
+/** Квадрат (2r+1)² вокруг idx (bomb+bomb r=2 → 5×5). */
+export function cellsInSquare(field: FieldState, idx: number, r: number): Set<number> {
+  const { cols, rows } = field;
+  const { x, y } = idxToXY(idx, cols);
+  const out = new Set<number>();
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    const nx = x + dx, ny = y + dy;
+    if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) out.add(xyToIdx(nx, ny, cols));
+  }
+  return out;
+}
+
+/** (2r+1) рядов вокруг idx.y целиком (r=0 → 1 ряд, r=1 → 3 ряда). */
+export function cellsInRows(field: FieldState, idx: number, r: number): Set<number> {
+  const { cols, rows } = field;
+  const { y } = idxToXY(idx, cols);
+  const out = new Set<number>();
+  for (let dy = -r; dy <= r; dy++) { const ny = y + dy; if (ny >= 0 && ny < rows) for (let x = 0; x < cols; x++) out.add(xyToIdx(x, ny, cols)); }
+  return out;
+}
+
+/** (2r+1) столбцов вокруг idx.x целиком. */
+export function cellsInCols(field: FieldState, idx: number, r: number): Set<number> {
+  const { cols, rows } = field;
+  const { x } = idxToXY(idx, cols);
+  const out = new Set<number>();
+  for (let dx = -r; dx <= r; dx++) { const nx = x + dx; if (nx >= 0 && nx < cols) for (let y = 0; y < rows; y++) out.add(xyToIdx(nx, y, cols)); }
+  return out;
+}
+
+/** Случайный тир, присутствующий на поле (для магнит-комбо). null — если плиток нет. */
+export function pickRandomPresentTier(field: FieldState, rng: () => number = Math.random): Tier | null {
+  const sp = getSpecial(field);
+  const present: Tier[] = [];
+  const seen = new Set<number>();
+  for (let i = 0; i < field.cells.length; i++) {
+    const t = field.cells[i];
+    if (sp[i] || !isValidTier(t) || seen.has(t)) continue;
+    seen.add(t); present.push(t);
+  }
+  if (!present.length) return null;
+  return present[Math.floor(rng() * present.length)];
+}
+
 /**
  * Цепная реакция: пока в clearedSet есть НЕсработавшие бустеры — добавляем их зону
  * поражения (новые задетые бустеры тоже срабатывают). Магниты в цепи бьют по

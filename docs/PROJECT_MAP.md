@@ -51,9 +51,11 @@ src/
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (схлоп + спавн бустеров за сложный матч),
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill,
 │   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
-│   │                        (заготовки эффектов бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials)
+│   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials,
+│   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
-│   ├── money.ts             tierValue=2^t, formatMoney, getTierStyle
+│   ├── money.ts             tierValue=2^t, formatMoney, formatMoneyFull (все знаки), getTierStyle
+│   ├── energy.ts            regenEnergy/energyToNextMs/hasEnergyForMove/spendEnergyForMove
 │   ├── boosters.ts          BoosterId (bomb/drone/rocket/magnet) + shuffleBoard
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
 │   ├── migrations.ts        Каскадные миграции (сейчас v1 = identity), self-test
@@ -65,7 +67,7 @@ src/
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
     │   ├── tierArt.ts       makeTierIcon (PNG T1..T28 + fallback)
     │   ├── headerView.ts    Шапка: аватар-хомяк, «Hamster Bank» + тэглайн, 🔔(+бэйдж), ⚙
-    │   ├── balanceCardView.ts  Карта Баланс+Алмазы + маскот + декор; refresh/bumpBalance/mascotReact; MONEY_TARGET
+    │   ├── balanceCardView.ts  Карта Баланс+Алмазы (все знаки, авто-уменьшение) + маскот + декор; refresh/bumpBalance; MONEY_TARGET
     │   ├── offersView.ts    Офферы SALE / Watch Ad (тап → заглушка)
     │   ├── infoRowView.ts   Level / Energy / Income (из сейва/конфига)
     │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, каскад-анимация, гравитация/досыпка
@@ -97,7 +99,8 @@ src/
    + уровень комбо (Σ групп), обновляет баннер «Комбо ×N» + сумму $ (`updateCombo`).
 4. Анимация шага: pop схлопнутых + падение уцелевших + досыпка (WAAPI).
 5. В конце хода `onMoveEnd()` → `economy.commitMove` (Баланс растёт ОДИН раз), деньги улетают в
-   **карту** (`flyMoneyToBalance` → `card.refresh()` + bump), маскот реагирует (комбо ≥ 2).
+   **карту** (`flyMoneyToBalance` → `card.refresh()` + bump). Бустеры активируются после
+   перемещения / тапом; комбо двух бустеров — 5×5 / 3+3 / крест / всё поле / магнит-спавн.
    Анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
 
 **Тап по кнопке-бустеру / офферу / вкладке / 🔔:** → `stubModal` (заглушки этой итерации).

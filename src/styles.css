@@ -814,44 +814,20 @@ body {
   box-shadow: inset 0 0 0 2px #ffd23f;
 }
 
-/* Бустеры на поле (из сложного матча: 💣 / 🚀 / 🧲): чип-подложка + пульс-рамка + PNG-иконка. */
+/* Бустеры на поле (из сложного матча: 💣 / 🚀 / 🧲): только PNG-иконка на обычной плашке
+   (без чёрной подложки и без подсветки ячейки). */
 .board-tile.board-booster {
   z-index: 3;
-}
-.board-tile.board-booster::before {
-  /* тёмный чип-подложка — бустер читается как отдельный объект, не плитка */
-  content: '';
-  position: absolute;
-  inset: 8%;
-  border-radius: 28%;
-  background: radial-gradient(circle at 50% 36%, #2b3550, #151b2b);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.22), 0 2px 5px rgba(0, 0, 0, 0.45);
-}
-.board-tile.board-booster::after {
-  /* пульсирующая цветная рамка (цвет — по типу бустера) */
-  content: '';
-  position: absolute;
-  inset: 6%;
-  border-radius: 28%;
-  pointer-events: none;
-  animation: special-pulse 1s ease-in-out infinite;
-}
-.board-booster-bomb::after   { box-shadow: 0 0 0 2px #ff7043, 0 0 12px 2px rgba(255, 112, 67, 0.85); }
-.board-booster-rocket::after { box-shadow: 0 0 0 2px #29b6f6, 0 0 12px 2px rgba(41, 182, 246, 0.85); }
-.board-booster-magnet::after { box-shadow: 0 0 0 2px #ab47bc, 0 0 12px 2px rgba(171, 71, 188, 0.9); }
-@keyframes special-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
 }
 .board-booster-icon {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 76%;
-  height: 76%;
+  width: 92%;
+  height: 92%;
   transform: translate(-50%, -50%);
   object-fit: contain;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
   pointer-events: none;
   z-index: 2;
 }

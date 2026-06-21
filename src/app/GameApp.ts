@@ -121,7 +121,6 @@ export class GameApp {
       spendEnergyForMove(d, Date.now()); // успешный ход тратит энергию
     });
     this.infoRow.refresh();
-    if (combo >= 2) this.card.mascotReact();
     this.flyMoneyToBalance(gained); // на прилёте обновит карту-баланс
     save();
   }

@@ -84,16 +84,4 @@ export class BalanceCardView {
       { duration: 260, easing: 'cubic-bezier(0.34,1.56,0.64,1)' },
     );
   }
-
-  /** Реакция маскота на комбо (подпрыг). */
-  mascotReact(): void {
-    this.mascot.animate(
-      [
-        { transform: 'translateY(0) scale(1)' },
-        { transform: 'translateY(-10px) scale(1.06)' },
-        { transform: 'translateY(0) scale(1)' },
-      ],
-      { duration: 420, easing: 'cubic-bezier(0.34,1.56,0.64,1)' },
-    );
-  }
 }
