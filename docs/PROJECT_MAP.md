@@ -6,7 +6,9 @@
 Игрок **свайпает** — меняет местами две ортогонально соседние плитки; линии ≥ `minLine` (=3) и
 квадраты 2×2 одного тира авто-схлопываются в **Баланс**; гравитация досыпает новые плитки —
 каскадами, пока есть матчи (комбо растёт). Свап без матча откатывается. Поле **6×5**. Сложный матч
-рождает **бустер на поле** (T/L→💣, линия-4→🚀, 2×2→🛸 дрон, линия-5→🧲); плюс **кнопки-бустеры** внизу. Над полем — карта баланса с маскотом,
+рождает **бустер на поле** (T/L→💣, линия-4→🚀, 2×2→🛸 дрон, линия-5→🧲); плюс **кнопки-бустеры** внизу.
+На поле также **собираемые** (💎 алмаз / ⚡ молния / 🎁 сейф-лутбокс) — собираются схлопом рядом/бустером.
+Энергия тратится в момент свайпа. Над полем — карта баланса с маскотом,
 офферы (SALE / Watch Ad), строка Level / Energy / Income. Снизу — меню из 5 вкладок.
 
 > Кодовая база/сейв — `MoneyMatch3` / `mmatch_save`. «Hamster Bank» — отображаемый бренд
@@ -16,8 +18,9 @@
 
 | Что меняем | Файл |
 |---|---|
-| Любая цифра баланса (тиры, board 6×5, minLine, energy, startLevel, бустеры) | [src/config/balance.ts](../src/config/balance.ts) |
-| Кор-логика match-3 (свап, поиск матчей, каскад, гравитация, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
+| Любая цифра баланса (тиры, board 6×5, minLine/rocketLineLen, energy, startLevel, бустеры, шансы 💎/⚡/🎁) | [src/config/balance.ts](../src/config/balance.ts) |
+| Кор-логика match-3 (свап, матчи, каскад, гравитация+спавн 💎/⚡/🎁, сбор собираемых, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
+| Тип-гарды `isBooster`/`isCollectible`, конверсии координат, getSpecial | [src/core/board.ts](../src/core/board.ts) |
 | Ценность схлопа (каскад-комбо) → Баланс | [src/core/economy.ts](../src/core/economy.ts) |
 | Внутренняя стоимость тира (2^t) + формат денег | [src/core/money.ts](../src/core/money.ts) |
 | Поле — свайп-ввод, 6×5, каскад-анимация, гравитация/досыпка | [src/ui/dom/boardView.ts](../src/ui/dom/boardView.ts) |
@@ -39,25 +42,25 @@
 src/
 ├── main.ts                  Bootstrap: balanceRuntime → styles.css → load() → new GameApp(#stage) → (DEV) devPanel
 ├── styles.css               Глобальные стили: #stage 390×844 FIT, синий фон/тема, блоки .hb-* (header/card/offer/pill/booster/nav), поле, FX, combo
-├── types.ts                 SaveData (balance/diamonds/board/investmentMultiplier/level/energy/boosters/…), FieldState (+special), Tier, SpecialKind
+├── types.ts                 SaveData (balance/diamonds/board/investmentMultiplier/level/energy/boosters/…), FieldState (+special), Tier; BoosterKind|CollectibleKind = SpecialKind
 │
 ├── app/GameApp.ts           Оркестратор (390×844): сборка вью, комбо-аккумулятор+баннер, onMoveEnd→economy.commitMove→полёт в карту
 │
 ├── config/
-│   └── balance.ts           ЕДИНЫЙ источник баланса (board 6×5, tierCount, match.{minLine,…}, economy, startLevel, energy, boosters×4)
+│   └── balance.ts           ЕДИНЫЙ источник баланса (board 6×5, tierCount, match.{minLine,rocketLineLen,…}, economy, startLevel, energy, collect{шансы 💎/⚡/🎁}, boosters×4)
 │
 ├── core/                    ЛОГИКА (pure, без DOM)
-│   ├── board.ts             isValidTier, idxToXY/xyToIdx, getSpecial, makeBoard
+│   ├── board.ts             isValidTier, isBooster/isCollectible (тип-гарды), idxToXY/xyToIdx, getSpecial, makeBoard
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (схлоп + спавн бустеров за сложный матч),
-│   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill,
-│   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
+│   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill (+спавн 💎/⚡/🎁),
+│   │                        resolveCollectibles (сбор/открытие), wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
 │   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials,
-│   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт),
+│   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт по приоритету),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
 │   ├── money.ts             tierValue=2^t, formatMoney, formatMoneyFull (все знаки), getTierStyle
 │   ├── energy.ts            regenEnergy/energyToNextMs/hasEnergyForMove/spendEnergyForMove
-│   ├── boosters.ts          BoosterId (bomb/drone/rocket/magnet) + shuffleBoard
+│   ├── boosters.ts          BoosterId (bomb/drone/rocket/magnet) + shuffleBoard (только плитки, спецобъекты на местах)
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
 │   ├── migrations.ts        Каскадные миграции (сейчас v1 = identity), self-test
 │   ├── balanceRuntime.ts    Dev-override 'mmatch_balance_override' (DEV only)
@@ -71,7 +74,7 @@ src/
     │   ├── balanceCardView.ts  Карта Баланс+Алмазы (все знаки, авто-уменьшение) + маскот + декор; refresh/bumpBalance; MONEY_TARGET
     │   ├── offersView.ts    Офферы SALE / Watch Ad (тап → заглушка)
     │   ├── infoRowView.ts   Level / Energy / Income (из сейва/конфига)
-    │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, каскад-анимация, гравитация/досыпка
+    │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, рендер плиток/бустеров/собираемых, постепенная анимация сбора (radial/instant), полёт дрона/💎/⚡, гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
     │   └── actionBarView.ts 4 круглые кнопки-бустера (счётчик) + нижнее меню 5 вкладок (Игра — центр)
     │
@@ -94,14 +97,18 @@ src/
 **Свайп-обмен (свап по полю):**
 1. [boardView.ts](../src/ui/dom/boardView.ts) `pointerdown` запоминает клетку, `pointermove` за
    порогом определяет соседа → `trySwap(a,b)`: `swapCells` + `hasMatchAny` (нет матча → откат назад).
-2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: обнуление, `applyGravityAndRefill`)
-   пока есть матчи. `step.groups` = число матч-групп шага (`countMatchGroups`). Сложный матч → бустер на поле.
+   Собираемые (💎/⚡/🎁) не свапаются. Валидный ход → `onSpendEnergy()` СРАЗУ (в момент свайпа).
+2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: сбор собираемых рядом/бустером →
+   обнуление → `applyGravityAndRefill` со спавном 💎/⚡/🎁) пока есть матчи. `step.groups` = число
+   матч-групп (`countMatchGroups`). Сложный матч → бустер; собранные 💎/⚡ → `onCollect` (полёт в баланс/энергию).
 3. На каждом шаге `onCascadeStep(tiers, groups)` → [GameApp](../src/app/GameApp.ts) копит `baseSum`
    + уровень комбо (Σ групп), обновляет баннер «Комбо ×N» + сумму $ (`updateCombo`).
-4. Анимация шага: pop схлопнутых + падение уцелевших + досыпка (WAAPI).
+4. Анимация шага: pop схлопнутых (для бустеров — ПОСТЕПЕННО от ближних к дальним ~1с, radial;
+   бомба — instant), полёт собранных 💎/⚡, падение уцелевших + досыпка (WAAPI).
 5. В конце хода `onMoveEnd()` → `economy.commitMove` (Баланс растёт ОДИН раз), деньги улетают в
    **карту** (`flyMoneyToBalance` → `card.refresh()` + bump). Бустеры активируются после
-   перемещения / тапом; дрон собирает плюс + летит к цели; комбо двух бустеров — 5×5 / 3+3 /
-   крест / всё поле / магнит-спавн / 3 дрона / дрон-уносит-бустер. Анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
+   перемещения / тапом; дрон собирает плюс НА ВЗЛЁТЕ и дольше летит к цели; комбо двух бустеров —
+   5×5 / 3+3 / крест / всё поле / магнит-спавн / 3 дрона / дрон-уносит-бустер. Энергия списана на
+   свайпе (шаг 1). Анти-дедлок (`hasAnyValidMove` → shuffle; только бустеры = гарант.ход). Сейв.
 
 **Тап по кнопке-бустеру / офферу / вкладке / 🔔:** → `stubModal` (заглушки этой итерации).

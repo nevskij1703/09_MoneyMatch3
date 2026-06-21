@@ -54,7 +54,9 @@ export class GameApp {
 
     this.board = new BoardView(stage, getData().board, {
       canMove: () => this.canMove(),
+      onSpendEnergy: () => this.onSpendEnergy(),
       onCascadeStep: (tiers, groups) => this.onCascadeStep(tiers, groups),
+      onCollect: (kind) => this.onCollect(kind),
       onMoveEnd: () => this.onMoveEnd(),
       onPersist: () => save(),
     });
@@ -107,20 +109,37 @@ export class GameApp {
     if (this.moveCombo >= 1) this.updateCombo(this.moveCombo, comboTotal(this.moveBaseSum, this.moveCombo));
   }
 
-  /** Конец хода (поле перестало матчиться): зачислить накопленное в Баланс + списать энергию. */
+  /** Ход подтверждён (свайп/тап): списать энергию СРАЗУ (не дожидаясь схлопа фишек). */
+  private onSpendEnergy(): void {
+    update((d) => spendEnergyForMove(d, Date.now()));
+    this.infoRow.refresh();
+  }
+
+  /** Собран алмаз/молния (без множителей): +1 💎 или +energy; обновить соответствующий HUD. */
+  private onCollect(kind: 'diamond' | 'lightning'): void {
+    update((d) => {
+      if (kind === 'diamond') {
+        d.diamonds += 1;
+      } else {
+        d.energy = Math.min(balance.energy.max, d.energy + balance.collect.lightningEnergy);
+        if (d.energy >= balance.energy.max) d.energyTs = Date.now();
+      }
+    });
+    if (kind === 'diamond') this.card.refresh();
+    else this.infoRow.refresh();
+    save();
+  }
+
+  /** Конец хода (поле перестало матчиться): зачислить накопленные деньги в Баланс. Энергия уже списана на свайпе. */
   private onMoveEnd(): void {
     const baseSum = this.moveBaseSum;
     const combo = this.moveCombo;
     this.moveBaseSum = 0;
     this.moveCombo = 0;
-    if (baseSum <= 0) { this.clearCombo(); return; } // ход без матчей (откат) — энергию не тратим
+    if (baseSum <= 0) { this.clearCombo(); return; } // ход без матчей (откат) — денег нет
 
     let gained = 0;
-    update((d) => {
-      gained = commitMove(d, baseSum, combo);
-      spendEnergyForMove(d, Date.now()); // успешный ход тратит энергию
-    });
-    this.infoRow.refresh();
+    update((d) => { gained = commitMove(d, baseSum, combo); });
     this.flyMoneyToBalance(gained); // на прилёте обновит карту-баланс
     save();
   }

@@ -75,8 +75,8 @@ function isValidBoard(b: any): b is FieldState {
   );
 }
 
-/** Допустимые типы бустеров в сейве (старый 'color' и прочий мусор → null). */
-const SPECIAL_KINDS = new Set<SpecialKind>(['bomb', 'rocket-h', 'rocket-v', 'magnet', 'drone']);
+/** Допустимые типы спецобъектов в сейве (бустеры + собираемые; старый 'color'/мусор → null). */
+const SPECIAL_KINDS = new Set<SpecialKind>(['bomb', 'rocket-h', 'rocket-v', 'magnet', 'drone', 'diamond', 'lightning', 'safe']);
 
 /**
  * Привести board.special к валидному массиву длины cells (мусор/отсутствие → null).

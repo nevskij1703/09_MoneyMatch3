@@ -72,6 +72,19 @@ export interface Balance {
     /** Сколько энергии тратится за один ход (успешный свап с матчем). */
     costPerMove: number;
   };
+  /** Собираемые объекты на поле (алмаз/молния/сейф) — шансы спавна при досыпке и их эффект. */
+  collect: {
+    /** Шанс, что досыпанная клетка — 💎 алмаз (вместо обычной плитки). */
+    diamondChance: number;
+    /** Шанс, что досыпанная клетка — ⚡ молния (энергия). */
+    lightningChance: number;
+    /** Шанс, что досыпанная клетка — 🎁 сейф (лутбокс). */
+    safeChance: number;
+    /** Сколько энергии даёт одна собранная молния (без множителей). */
+    lightningEnergy: number;
+    /** Веса наград сейфа при открытии (booster — случайный из bomb/rocket/magnet/drone). */
+    safeReward: { booster: number; diamond: number; lightning: number };
+  };
   boosters: {
     /** 4 бустера-кнопки (bomb/drone/rocket/magnet; эффекты — будущее). На поле НЕ спавнятся. */
     definitions: BoosterDef[];
@@ -116,6 +129,13 @@ export const balance: Balance = {
     regenAmount: 10,   // +10 энергии…
     regenSeconds: 600, // …каждые 10 минут
     costPerMove: 1,    // −1 за ход (успешный свап с матчем)
+  },
+  collect: {
+    diamondChance: 0.01,   // ~1% досыпанных клеток — алмаз
+    lightningChance: 0.03, // ~3% — молния (энергия)
+    safeChance: 0.05,      // ~5% — сейф (лутбокс)
+    lightningEnergy: 3,    // молния → +3 энергии
+    safeReward: { booster: 0.6, diamond: 0.25, lightning: 0.15 }, // что выпадает из сейфа
   },
   boosters: {
     // Кнопки-бустеры (реальные эффекты — будущая фаза). Иконки — public/assets/boosters/<id>.png.

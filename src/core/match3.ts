@@ -16,9 +16,9 @@
 // Здесь — только расчёт/мутация поля. Ввод (pointer, анимации) — в ui/dom/boardView.ts.
 // Ценность сбора (деньги) — в core/economy.ts.
 
-import type { FieldState, Tier, SpecialKind } from '../types';
+import type { FieldState, Tier, SpecialKind, BoosterKind, CollectibleKind } from '../types';
 import { balance } from '../config/balance';
-import { idxToXY, xyToIdx, isValidTier, getSpecial } from './board';
+import { idxToXY, xyToIdx, isValidTier, getSpecial, isBooster, isCollectible } from './board';
 
 // ─── Базовые операции ────────────────────────────────────────────────────────
 
@@ -256,9 +256,10 @@ export function cellsInPlus(field: FieldState, idx: number): Set<number> {
 }
 
 /**
- * Куда «летит» дрон: приоритет 🧲 magnet → 💣 bomb → 🚀 rocket → 🛸 drone, среди РАВНЫХ —
- * случайно (rng). Если бустеров (кроме исключённых) нет — случайная клетка с плиткой-деньгами.
- * `exclude` — клетки, которые нельзя выбирать (сам дрон добавляется автоматически). null — поле пусто.
+ * Куда «летит» дрон: приоритет 🧲 magnet → 💣 bomb → 🚀 rocket → 🛸 drone → 💎 diamond →
+ * ⚡ lightning → 🎁 safe, среди РАВНЫХ — случайно (rng). Собираемые (алмаз/молния/сейф) — цель
+ * ВЫШЕ обычных плиток, но НИЖЕ бустеров. Если ничего из перечисленного нет — случайная
+ * клетка с плиткой-деньгами. `exclude` — клетки, которые нельзя выбирать. null — поле пусто.
  */
 export function pickDroneFlightTarget(
   field: FieldState,
@@ -269,7 +270,9 @@ export function pickDroneFlightTarget(
   const sp = getSpecial(field);
   const skip = new Set<number>(exclude ?? []);
   skip.add(selfIdx);
-  const priority: SpecialKind[][] = [['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone']];
+  const priority: SpecialKind[][] = [
+    ['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone'], ['diamond'], ['lightning'], ['safe'],
+  ];
   for (const kinds of priority) {
     const cand: number[] = [];
     for (let i = 0; i < sp.length; i++) {
@@ -346,10 +349,11 @@ export function pickRandomPresentTier(field: FieldState, rng: () => number = Mat
 }
 
 /**
- * Цепная реакция: пока в clearedSet есть НЕсработавшие бустеры — добавляем их зону
+ * Цепная реакция: пока в clearedSet есть НЕсработавшие БУСТЕРЫ — добавляем их зону
  * поражения (новые задетые бустеры тоже срабатывают). Магниты в цепи бьют по
- * случайному ближайшему тиру. `preFired` — бустеры, уже сработавшие с явной целью
- * (свайп) — их не перезапускаем. Mutates clearedSet.
+ * случайному ближайшему тиру. Собираемые (алмаз/молния/сейф), попавшие в зону, в цепь
+ * НЕ вступают (не детонируют) — их сбор/открытие делает resolveCollectibles в applyClear.
+ * `preFired` — бустеры, уже сработавшие с явной целью (свайп) — их не перезапускаем. Mutates clearedSet.
  */
 export function expandClearWithSpecials(
   field: FieldState,
@@ -360,13 +364,13 @@ export function expandClearWithSpecials(
   const sp = getSpecial(field);
   const fired = new Set<number>(preFired ?? []);
   const stack: number[] = [];
-  for (const i of clearedSet) if (sp[i] && !fired.has(i)) { fired.add(i); stack.push(i); }
+  for (const i of clearedSet) if (isBooster(sp[i]) && !fired.has(i)) { fired.add(i); stack.push(i); }
   while (stack.length) {
     const i = stack.pop() as number;
     const target = sp[i] === 'magnet' ? pickNearestTileTier(field, i, rng) : null;
     for (const t of boosterTargets(field, i, target, rng)) {
       clearedSet.add(t);
-      if (sp[t] && !fired.has(t)) { fired.add(t); stack.push(t); }
+      if (isBooster(sp[t]) && !fired.has(t)) { fired.add(t); stack.push(t); }
     }
   }
 }
@@ -376,20 +380,22 @@ export function expandClearWithSpecials(
 export interface GravityResult {
   /** Существующие объекты, сдвинувшиеся вниз: { from: старый idx, to: новый idx }. */
   falls: { from: number; to: number }[];
-  /** Новые плитки, досыпанные сверху: { idx, tier }. */
-  spawns: { idx: number; tier: Tier }[];
+  /** Новые объекты сверху: плитка (`tier`, kind=null) ИЛИ собираемый (`kind`, tier=null). */
+  spawns: { idx: number; tier: Tier | null; kind: SpecialKind | null }[];
 }
 
 /**
- * Гравитация по столбцам + досыпка сверху. Существующие объекты (плитки И бустеры)
- * уплотняются вниз, сверху добавляются новые случайные тиры [1..tierCount] (без
- * бустеров). Mutates field. Возвращает перемещения и спавны для анимаций.
+ * Гравитация по столбцам + досыпка сверху. Существующие объекты (плитки, бустеры,
+ * собираемые) уплотняются вниз; сверху досыпается новый объект: с шансами из
+ * balance.collect — 💎 алмаз / ⚡ молния / 🎁 сейф, иначе случайный тир [1..tierCount].
+ * Mutates field. Возвращает перемещения и спавны для анимаций.
  */
 export function applyGravityAndRefill(field: FieldState, tierCount: number, rng: () => number = Math.random): GravityResult {
   const falls: { from: number; to: number }[] = [];
-  const spawns: { idx: number; tier: Tier }[] = [];
+  const spawns: { idx: number; tier: Tier | null; kind: SpecialKind | null }[] = [];
   const { cols, rows } = field;
   const sp = getSpecial(field);
+  const c = balance.collect;
   for (let x = 0; x < cols; x++) {
     let writeY = rows - 1; // следующий свободный слот снизу
     for (let y = rows - 1; y >= 0; y--) {
@@ -405,13 +411,24 @@ export function applyGravityAndRefill(field: FieldState, tierCount: number, rng:
       }
       writeY--;
     }
-    // Оставшиеся сверху слоты (writeY..0) — новые плитки без бустеров.
+    // Оставшиеся сверху слоты (writeY..0) — новые объекты (собираемый по шансу, иначе плитка).
     for (let y = writeY; y >= 0; y--) {
       const idx = xyToIdx(x, y, cols);
-      const tier = 1 + Math.floor(rng() * tierCount);
-      field.cells[idx] = tier;
-      sp[idx] = null;
-      spawns.push({ idx, tier });
+      const r = rng();
+      let kind: CollectibleKind | null = null;
+      if (r < c.diamondChance) kind = 'diamond';
+      else if (r < c.diamondChance + c.lightningChance) kind = 'lightning';
+      else if (r < c.diamondChance + c.lightningChance + c.safeChance) kind = 'safe';
+      if (kind) {
+        field.cells[idx] = null;
+        sp[idx] = kind;
+        spawns.push({ idx, tier: null, kind });
+      } else {
+        const tier = 1 + Math.floor(rng() * tierCount);
+        field.cells[idx] = tier;
+        sp[idx] = null;
+        spawns.push({ idx, tier, kind: null });
+      }
     }
   }
   return { falls, spawns };
@@ -421,18 +438,26 @@ export function applyGravityAndRefill(field: FieldState, tierCount: number, rng:
 
 /** Дельта одного шага каскада для анимации в boardView. */
 export interface CascadeStep {
-  /** Обнулённые клетки (pop). */
+  /** Обнулённые клетки (pop). Включает собранные алмазы/молнии (их idx также в `collected`). */
   cleared: number[];
   /** Тиры обнулённых клеток — для начисления денег. */
   clearedTiers: Tier[];
-  /** Anchor-клетки, ставшие бустерами (самостоятельные объекты). */
+  /** Anchor-клетки, ставшие спецобъектами (бустеры из матчей + награды открытых сейфов). */
   spawns: MatchSpawn[];
   /** Перемещения уцелевших объектов вниз. */
   falls: { from: number; to: number }[];
-  /** Новые плитки сверху. */
-  refills: { idx: number; tier: Tier }[];
+  /** Новые объекты сверху: плитка (`tier`) или собираемый (`kind`). */
+  refills: { idx: number; tier: Tier | null; kind: SpecialKind | null }[];
   /** Число различных натуральных матч-групп в этом шаге (для комбо; спецвзрывы не считаются). */
   groups: number;
+  /** Собранные алмазы/молнии (улетают в баланс 💎 / запас энергии; без множителей). */
+  collected: { idx: number; kind: CollectibleKind }[];
+  /** Открытые сейфы: на месте `idx` появилась награда `kind` (она же в `spawns`). */
+  opened: { idx: number; kind: SpecialKind }[];
+  /** Сколько 💎 собрано на шаге. */
+  diamonds: number;
+  /** Сколько энергии собрано на шаге. */
+  energy: number;
 }
 
 /**
@@ -468,12 +493,64 @@ export function countMatchGroups(field: FieldState, cleared: Set<number>): numbe
   return groups;
 }
 
+/** Случайная награда сейфа: бустер (случайный из 5) / алмаз / молния — по весам balance.collect.safeReward. */
+function rollSafeReward(rng: () => number): SpecialKind {
+  const w = balance.collect.safeReward;
+  let r = rng() * (w.booster + w.diamond + w.lightning);
+  if ((r -= w.booster) < 0) {
+    const bs: BoosterKind[] = ['bomb', 'rocket-h', 'rocket-v', 'magnet', 'drone'];
+    return bs[Math.floor(rng() * bs.length)];
+  }
+  if ((r -= w.diamond) < 0) return 'diamond';
+  return 'lightning';
+}
+
 /**
- * Применить готовый clear-set + спавны: обнуление клеток, установка бустеров на
- * anchor-клетки (cells=null — самостоятельный объект), гравитация + досыпка. НЕ
- * запускает цепную реакцию бустеров (её делает вызывающий до applyClear через
- * expandClearWithSpecials — натуральные матчи бустеров не содержат). Mutates field
- * и clearedSet. Возвращает дельту для анимации.
+ * Сработавшие собираемые объекты в текущем clear-set. Триггер: клетка собираемого ∈ clearedSet
+ * (прямое попадание бустером) ИЛИ ортогонально рядом схлопывается плитка. diamond/lightning →
+ * собираются (idx добавляется в clearedSet, считается в diamonds/energy); safe → ОТКРЫВАЕТСЯ
+ * (награда добавляется в spawns и переживает шаг, в clearedSet НЕ попадает). Mutates clearedSet и spawns.
+ */
+function resolveCollectibles(
+  field: FieldState,
+  clearedSet: Set<number>,
+  spawns: MatchSpawn[],
+  rng: () => number,
+): Pick<CascadeStep, 'collected' | 'opened' | 'diamonds' | 'energy'> {
+  const sp = getSpecial(field);
+  const { cols, rows } = field;
+  const clearedTiles = new Set<number>();
+  for (const i of clearedSet) if (isValidTier(field.cells[i])) clearedTiles.add(i);
+  const spawnIdx = new Set(spawns.map((s) => s.idx));
+
+  const collected: { idx: number; kind: CollectibleKind }[] = [];
+  const opened: { idx: number; kind: SpecialKind }[] = [];
+  let diamonds = 0, energy = 0;
+  for (let i = 0; i < sp.length; i++) {
+    const k = sp[i];
+    if (!isCollectible(k) || spawnIdx.has(i)) continue;
+    let triggered = clearedSet.has(i);
+    if (!triggered) {
+      const { x, y } = idxToXY(i, cols);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        if (clearedTiles.has(xyToIdx(nx, ny, cols))) { triggered = true; break; }
+      }
+    }
+    if (!triggered) continue;
+    if (k === 'diamond') { collected.push({ idx: i, kind: 'diamond' }); diamonds += 1; clearedSet.add(i); }
+    else if (k === 'lightning') { collected.push({ idx: i, kind: 'lightning' }); energy += balance.collect.lightningEnergy; clearedSet.add(i); }
+    else { const reward = rollSafeReward(rng); opened.push({ idx: i, kind: reward }); spawns.push({ idx: i, kind: reward, tier: 1 }); }
+  }
+  return { collected, opened, diamonds, energy };
+}
+
+/**
+ * Применить готовый clear-set + спавны: сначала разрешить собираемые (сбор алмазов/молний,
+ * открытие сейфов в награды), затем обнуление клеток, установка спецобъектов на anchor-клетки
+ * (cells=null), гравитация + досыпка. НЕ запускает цепную реакцию бустеров (её делает вызывающий
+ * через expandClearWithSpecials). Mutates field и clearedSet. Возвращает дельту для анимации.
  */
 export function applyClear(
   field: FieldState,
@@ -483,7 +560,9 @@ export function applyClear(
   rng: () => number = Math.random,
 ): CascadeStep {
   const sp = getSpecial(field);
-  // Anchor-клетки переживают схлоп — на их месте вырастет бустер.
+  // Собираемые (алмаз/молния → сбор и в clearedSet; сейф → награда в spawns).
+  const coll = resolveCollectibles(field, clearedSet, spawns, rng);
+  // Anchor-клетки (бустеры из матчей + награды сейфов) переживают схлоп.
   for (const s of spawns) clearedSet.delete(s.idx);
 
   const cleared: number[] = [];
@@ -495,11 +574,14 @@ export function applyClear(
     sp[i] = null;
     cleared.push(i);
   }
-  // Бустер — самостоятельный объект: плитки под ним нет (cells=null).
+  // Спецобъект — самостоятельный: плитки под ним нет (cells=null).
   for (const s of spawns) { field.cells[s.idx] = null; sp[s.idx] = s.kind; }
 
   const g = applyGravityAndRefill(field, tierCount, rng);
-  return { cleared, clearedTiers, spawns, falls: g.falls, refills: g.spawns, groups: 0 };
+  return {
+    cleared, clearedTiers, spawns, falls: g.falls, refills: g.spawns, groups: 0,
+    collected: coll.collected, opened: coll.opened, diamonds: coll.diamonds, energy: coll.energy,
+  };
 }
 
 /**
@@ -522,21 +604,22 @@ export function resolveStep(
 
 // ─── Валидность хода / дедлок ───────────────────────────────────────────────────
 
-/** Даст ли свап a↔b матч? Бустер «применяется» всегда. Поле не меняется (откат). */
+/** Даст ли свап a↔b матч? Бустер «применяется» всегда; собираемые НЕ свапаются. Поле не меняется (откат). */
 export function wouldSwapMatch(field: FieldState, a: number, b: number): boolean {
   const sp = getSpecial(field);
-  if (sp[a] || sp[b]) return true;
+  if (isCollectible(sp[a]) || isCollectible(sp[b])) return false; // алмаз/молния/сейф нельзя свапать
+  if (isBooster(sp[a]) || isBooster(sp[b])) return true;
   swapCells(field, a, b);
   const has = hasMatchAny(field);
   swapCells(field, a, b);
   return has;
 }
 
-/** Есть ли хоть один доступный ход (валидный свап или бустер на поле). */
+/** Есть ли хоть один доступный ход (валидный свап или БУСТЕР на поле; собираемые ходом не считаются). */
 export function hasAnyValidMove(field: FieldState): boolean {
   const { cols, rows } = field;
   const sp = getSpecial(field);
-  for (let i = 0; i < sp.length; i++) if (sp[i]) return true;
+  for (let i = 0; i < sp.length; i++) if (isBooster(sp[i])) return true;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = xyToIdx(x, y, cols);

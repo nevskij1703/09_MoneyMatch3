@@ -14,7 +14,7 @@
     "board": {                    // поле match-3 6×5
       "cols": 6, "rows": 5,
       "cells":   [ /* 30 × (Tier|null) */ ],
-      "special": [ /* 30 × ('bomb'|'rocket-h'|'rocket-v'|'magnet'|null) — бустеры на поле (cells[i]=null под бустером) */ ]
+      "special": [ /* 30 × (бустер 'bomb'|'rocket-h'|'rocket-v'|'magnet'|'drone' | собираемый 'diamond'|'lightning'|'safe' | null); под спецобъектом cells[i]=null */ ]
     },
     "investmentMultiplier": 1,    // множитель дохода (HUD «Income ×N»; инвестиции/уровень — будущее)
     "level": 1,                   // уровень игрока (HUD «Level»; прокачка — будущее)
@@ -43,9 +43,10 @@
   `boosters` пере-сеется по актуальным id (`bomb/drone/rocket/magnet`) — старые ключи отбрасываются.
   Поле берётся из сейва только при совпадении форм-фактора (`cols/rows`); старый **6×6** не
   совпадёт с текущим **6×5** → board регенерится заново (`makeMatch3Board`, живых юзеров нет).
-  `board.special` нормализуется (`normalizeSpecial`): элементы только
-  `'bomb'`/`'rocket-h'`/`'rocket-v'`/`'magnet'`/`null` (под бустером `cells[i]=null`). Бустеры
-  спавнятся на поле из сложного матча. При загрузке стартовые матчи поля тихо схлопываются
+  `board.special` нормализуется (`normalizeSpecial`): элементы только бустеры
+  `'bomb'`/`'rocket-h'`/`'rocket-v'`/`'magnet'`/`'drone'`, собираемые `'diamond'`/`'lightning'`/`'safe'`
+  или `null` (под спецобъектом `cells[i]=null`). Бустеры спавнятся из сложного матча, собираемые —
+  из досыпки (`balance.collect`). При загрузке стартовые матчи поля тихо схлопываются
   (`settleInitial` в boardView), затем гарантируется ход.
 - Любое breaking-изменение формата (новое поле, переименование, смена типа) = новая функция
   миграции. **До первого RC** можно расширять `migrations[1]` свободно (живых юзеров нет).
