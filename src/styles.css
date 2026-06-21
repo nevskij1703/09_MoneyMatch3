@@ -843,6 +843,16 @@ body {
   pointer-events: none;
   z-index: 3;
 }
+/* Летящий дрон (🛸 при активации: «взлёт» из своей клетки к цели). Чисто косметика. */
+.board-drone-fly {
+  position: absolute;
+  left: 0;
+  top: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+  z-index: 9;
+}
 
 /* Нижний ряд из 4 кнопок-бустеров (на btn-square-white.svg). */
 .booster-btn {

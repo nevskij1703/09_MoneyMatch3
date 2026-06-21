@@ -6,7 +6,7 @@
 Игрок **свайпает** — меняет местами две ортогонально соседние плитки; линии ≥ `minLine` (=3) и
 квадраты 2×2 одного тира авто-схлопываются в **Баланс**; гравитация досыпает новые плитки —
 каскадами, пока есть матчи (комбо растёт). Свап без матча откатывается. Поле **6×5**. Сложный матч
-рождает **бустер на поле** (T/L→💣, 2×2→🚀, линия-5→🧲); плюс **кнопки-бустеры** внизу. Над полем — карта баланса с маскотом,
+рождает **бустер на поле** (T/L→💣, линия-4→🚀, 2×2→🛸 дрон, линия-5→🧲); плюс **кнопки-бустеры** внизу. Над полем — карта баланса с маскотом,
 офферы (SALE / Watch Ad), строка Level / Energy / Income. Снизу — меню из 5 вкладок.
 
 > Кодовая база/сейв — `MoneyMatch3` / `mmatch_save`. «Hamster Bank» — отображаемый бренд
@@ -52,6 +52,7 @@ src/
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill,
 │   │                        wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
 │   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials,
+│   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
 │   ├── money.ts             tierValue=2^t, formatMoney, formatMoneyFull (все знаки), getTierStyle
@@ -100,7 +101,7 @@ src/
 4. Анимация шага: pop схлопнутых + падение уцелевших + досыпка (WAAPI).
 5. В конце хода `onMoveEnd()` → `economy.commitMove` (Баланс растёт ОДИН раз), деньги улетают в
    **карту** (`flyMoneyToBalance` → `card.refresh()` + bump). Бустеры активируются после
-   перемещения / тапом; комбо двух бустеров — 5×5 / 3+3 / крест / всё поле / магнит-спавн.
-   Анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
+   перемещения / тапом; дрон собирает плюс + летит к цели; комбо двух бустеров — 5×5 / 3+3 /
+   крест / всё поле / магнит-спавн / 3 дрона / дрон-уносит-бустер. Анти-дедлок (`hasAnyValidMove` → shuffle). Сейв.
 
 **Тап по кнопке-бустеру / офферу / вкладке / 🔔:** → `stubModal` (заглушки этой итерации).

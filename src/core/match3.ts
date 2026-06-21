@@ -5,7 +5,8 @@
 // разрешается каскадами: матчи схлопываются (деньги в Баланс), спецматчи рождают
 // БУСТЕРЫ (самостоятельные объекты, cells[i]=null):
 //   • фигура T/L (пересечение линий 3+ по верт. и гориз.) → 💣 Бомба (взрыв 3×3);
-//   • квадрат 2×2 → 🚀 Ракета (h/v рандом; сносит весь ряд/столбец);
+//   • линия из 4 → 🚀 Ракета (h/v по ориентации линии; сносит весь ряд/столбец);
+//   • квадрат 2×2 → 🛸 Дрон (плюс вокруг себя + полёт к приоритетной цели);
 //   • линия из 5 → 🧲 Магнит (собирает весь тир).
 // Затем гравитация уплотняет столбцы и досыпает новые плитки — пока есть матчи.
 // Свап без матча откатывается (если ни одна из двух клеток не бустер). Бустер
@@ -51,8 +52,9 @@ export interface MatchResult { cleared: Set<number>; spawns: MatchSpawn[]; }
  * Найти все матчи на поле: линии ≥ minLine (верт./гориз.) и квадраты 2×2 одного тира.
  * Клетки группируются (4-смежность, один тир) → СЛОЖНЫЙ матч рождает ОДИН бустер на anchor
  * по приоритету формы: линия ≥ colorLineLen → 🧲 magnet; пересечение линий 3+ (T/L/+) → 💣 bomb;
- * квадрат 2×2 → 🚀 rocket (h/v рандом по rng). Прямая линия 3/4 без пересечения/квадрата —
- * обычный схлоп без бустера. `moved` (клетки свапа) — anchor выбирается среди них.
+ * прямая линия ≥ rocketLineLen (4) → 🚀 rocket (h/v по ориентации линии); квадрат 2×2 → 🛸 drone.
+ * Прямая линия 3 без пересечения/квадрата — обычный схлоп без бустера. `moved` (клетки свапа) —
+ * anchor выбирается среди них.
  */
 export function findMatches(
   field: FieldState,
@@ -64,7 +66,7 @@ export function findMatches(
   const N = cols * rows;
   const cleared = new Set<number>();
   const movedSet = new Set<number>(moved ?? []);
-  const { minLine, colorLineLen } = balance.match;
+  const { minLine, rocketLineLen, colorLineLen } = balance.match;
 
   // Длина линии-матча через клетку (0 — не в линии ≥ minLine) + признак квадрата.
   const hLen = new Array<number>(N).fill(0);
@@ -153,10 +155,17 @@ export function findMatches(
       spawns.push({ idx: pickMoved((i) => hLen[i] >= colorLineLen || vLen[i] >= colorLineLen, fallback), kind: 'magnet', tier });
     } else if (intersection >= 0) {
       spawns.push({ idx: pickMoved((i) => hLen[i] >= minLine && vLen[i] >= minLine, intersection), kind: 'bomb', tier });
+    } else if (maxLine >= rocketLineLen) {
+      // Прямая линия из rocketLineLen (4) без пересечения → ракета ВДОЛЬ линии
+      // (гориз. линия → rocket-h: сносит ряд; верт. → rocket-v: сносит столбец).
+      const horiz = group.some((i) => hLen[i] >= rocketLineLen);
+      const onLong = group.filter((i) => (horiz ? hLen[i] : vLen[i]) >= rocketLineLen);
+      const fallback = onLong.length ? onLong[Math.floor(onLong.length / 2)] : group[0];
+      spawns.push({ idx: pickMoved((i) => (horiz ? hLen[i] : vLen[i]) >= rocketLineLen, fallback), kind: horiz ? 'rocket-h' : 'rocket-v', tier });
     } else if (square >= 0) {
-      spawns.push({ idx: pickMoved((i) => inSquare.has(i), square), kind: rng() < 0.5 ? 'rocket-h' : 'rocket-v', tier });
+      spawns.push({ idx: pickMoved((i) => inSquare.has(i), square), kind: 'drone', tier });
     }
-    // иначе — прямая линия 3/4: обычный схлоп без бустера.
+    // иначе — прямая линия 3: обычный схлоп без бустера.
   }
   return { cleared, spawns };
 }
@@ -173,10 +182,12 @@ export function hasMatchAny(field: FieldState): boolean {
  *   bomb     — область (2·bombRadius+1)² вокруг (3×3 при radius=1);
  *   rocket-h — весь ряд y; rocket-v — весь столбец x;
  *   magnet   — все клетки тира `targetTier` (его обязан выбрать вызывающий: тир соседа
- *              по свайпу или случайный ближайший — magnet «цвета» не имеет).
- * Если в клетке нет бустера — пустое множество.
+ *              по свайпу или случайный ближайший — magnet «цвета» не имеет);
+ *   drone    — «плюс» вокруг себя (центр + 4 стороны) + клетка-цель полёта (см. droneTargets;
+ *              если цель — бустер, его подхватит цепная реакция в expandClearWithSpecials).
+ * Если в клетке нет бустера — пустое множество. `rng` нужен дрону (выбор цели полёта).
  */
-export function boosterTargets(field: FieldState, idx: number, targetTier?: Tier | null): Set<number> {
+export function boosterTargets(field: FieldState, idx: number, targetTier?: Tier | null, rng: () => number = Math.random): Set<number> {
   const sp = getSpecial(field);
   const kind = sp[idx];
   const out = new Set<number>();
@@ -197,6 +208,8 @@ export function boosterTargets(field: FieldState, idx: number, targetTier?: Tier
     for (let nx = 0; nx < cols; nx++) out.add(xyToIdx(nx, y, cols));
   } else if (kind === 'rocket-v') {
     for (let ny = 0; ny < rows; ny++) out.add(xyToIdx(x, ny, cols));
+  } else if (kind === 'drone') {
+    for (const c of droneTargets(field, idx, rng).cells) out.add(c);
   } else { // magnet
     if (isValidTier(targetTier)) {
       for (let i = 0; i < field.cells.length; i++) if (field.cells[i] === targetTier) out.add(i);
@@ -226,6 +239,64 @@ export function pickNearestTileTier(field: FieldState, idx: number, rng: () => n
   }
   if (!bucket.length) return null;
   return bucket[Math.floor(rng() * bucket.length)];
+}
+
+// ─── Дрон (плюс + полёт к цели) ──────────────────────────────────────────────────
+
+/** «Плюс» вокруг idx: центр + 4 ортогональных соседа (в пределах поля). */
+export function cellsInPlus(field: FieldState, idx: number): Set<number> {
+  const { cols, rows } = field;
+  const { x, y } = idxToXY(idx, cols);
+  const out = new Set<number>([idx]);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    const nx = x + dx, ny = y + dy;
+    if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) out.add(xyToIdx(nx, ny, cols));
+  }
+  return out;
+}
+
+/**
+ * Куда «летит» дрон: приоритет 🧲 magnet → 💣 bomb → 🚀 rocket → 🛸 drone, среди РАВНЫХ —
+ * случайно (rng). Если бустеров (кроме исключённых) нет — случайная клетка с плиткой-деньгами.
+ * `exclude` — клетки, которые нельзя выбирать (сам дрон добавляется автоматически). null — поле пусто.
+ */
+export function pickDroneFlightTarget(
+  field: FieldState,
+  selfIdx: number,
+  rng: () => number = Math.random,
+  exclude?: Iterable<number>,
+): number | null {
+  const sp = getSpecial(field);
+  const skip = new Set<number>(exclude ?? []);
+  skip.add(selfIdx);
+  const priority: SpecialKind[][] = [['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone']];
+  for (const kinds of priority) {
+    const cand: number[] = [];
+    for (let i = 0; i < sp.length; i++) {
+      const k = sp[i];
+      if (!skip.has(i) && k && kinds.indexOf(k) >= 0) cand.push(i);
+    }
+    if (cand.length) return cand[Math.floor(rng() * cand.length)];
+  }
+  const money: number[] = [];
+  for (let i = 0; i < field.cells.length; i++) {
+    if (!skip.has(i) && !sp[i] && isValidTier(field.cells[i])) money.push(i);
+  }
+  if (money.length) return money[Math.floor(rng() * money.length)];
+  return null;
+}
+
+/** Зона дрона: «плюс» (центр + 4 стороны) + клетка-цель полёта. flightTarget=null → поле пусто. */
+export function droneTargets(
+  field: FieldState,
+  idx: number,
+  rng: () => number = Math.random,
+  exclude?: Iterable<number>,
+): { cells: Set<number>; flightTarget: number | null } {
+  const cells = cellsInPlus(field, idx);
+  const flightTarget = pickDroneFlightTarget(field, idx, rng, exclude);
+  if (flightTarget != null) cells.add(flightTarget);
+  return { cells, flightTarget };
 }
 
 // ─── Геометрия зон (для комбо-эффектов бустеров) ─────────────────────────────────
@@ -293,7 +364,7 @@ export function expandClearWithSpecials(
   while (stack.length) {
     const i = stack.pop() as number;
     const target = sp[i] === 'magnet' ? pickNearestTileTier(field, i, rng) : null;
-    for (const t of boosterTargets(field, i, target)) {
+    for (const t of boosterTargets(field, i, target, rng)) {
       clearedSet.add(t);
       if (sp[t] && !fired.has(t)) { fired.add(t); stack.push(t); }
     }
