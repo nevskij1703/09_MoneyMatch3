@@ -12,7 +12,8 @@
 //    🧲+любой → спавн партнёра по тиру + взрыв; 🛸+🛸 → 3 дрона; 🛸+💣/🚀 → дрон уносит бустер.
 //  • сбор бустера ПОСТЕПЕННЫЙ (от ближних к дальним, ~1с); бомба — сразу всё; дрон — дольше летит.
 //
-// СОБИРАЕМЫЕ на поле (💎 алмаз / ⚡ молния / 🎁 сейф): не свапаются; собираются, если рядом схлоп
+// СОБИРАЕМЫЕ на поле (💎 алмаз / ⚡ молния / 🎁 сейф): СВАПАЮТСЯ как обычные фишки (обмен прилипает,
+// если образовался матч; свайп на бустер активирует его и собирает их). Собираются, если рядом схлоп
 // ИЛИ по ним прошёл бустер. Алмаз → +1💎, молния → +energy (без множителей, улетают в баланс).
 // Сейф → открывается в награду (бустер/алмаз/молния), которая остаётся лежать до своего сбора.
 //
@@ -66,6 +67,7 @@ const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
 const SWAP_DUR = 150;
 const POP_DUR = 230;        // длительность одного pop'а
 const RADIAL_SPAN = 155;    // за столько мс «добегает» волна сбора до самой дальней клетки (быстро)
+const REFILL_STAGGER = 65;  // сдвиг падения досыпки по столбцу (снизу вверх), мс между предметами
 
 // Цели полёта собранных объектов (дизайн-координаты 390×844): 💎 — значение в карте, ⚡ — пилюля Energy.
 const DIAMOND_TARGET = { x: 44, y: 237 } as const;
@@ -276,18 +278,19 @@ export class BoardView {
 
   private async trySwap(a: number, b: number): Promise<void> {
     if (this.busy || !areOrthoNeighbors(a, b, this.field.cols)) return;
-    const sp = getSpecial(this.field);
-    if (isCollectible(sp[a]) || isCollectible(sp[b])) return; // 💎/⚡/🎁 не свапаются
     if (!this.callbacks.canMove()) return; // нет энергии — ход недоступен
     this.busy = true;
 
+    const sp = getSpecial(this.field);
     if (isBooster(sp[a]) || isBooster(sp[b])) {
-      // Сначала ПЕРЕМЕЩЕНИЕ (обмен a↔b), затем активация на новых местах.
+      // Хотя бы один — БУСТЕР: перемещаем (обмен a↔b) и активируем на новых местах.
+      // Собираемый, свайпнутый на бустер, попадёт под сбор (см. resolveBoosterActivation).
       swapCells(this.field, a, b);
       this.callbacks.onSpendEnergy(); // ход состоялся → энергия сразу (в момент свайпа)
       await this.swapTilesVisual(a, b);
       await this.resolveBoosterActivation(a, b); // dest перетаскиваемого = b
-    } else if (isValidTier(this.field.cells[a]) && isValidTier(this.field.cells[b])) {
+    } else {
+      // Плитки и/или собираемые (💎/⚡/🎁): обмен «прилипает», только если образовался матч (классика).
       swapCells(this.field, a, b);
       const matched = hasMatchAny(this.field);
       if (matched) this.callbacks.onSpendEnergy(); // валидный ход → энергия сразу
@@ -321,13 +324,14 @@ export class BoardView {
     this.callbacks.onPersist();
   }
 
-  /** Активировать ОДИН бустер на его клетке (магнит — по target; дрон — отдельным путём). */
-  private async activateOneBooster(self: number, magnetTarget: Tier | null): Promise<void> {
+  /** Активировать ОДИН бустер на его клетке (магнит — по target; дрон — отдельным путём). `extra` — клетка, добавляемая в зону (собираемый, свайпнутый на бустер). */
+  private async activateOneBooster(self: number, magnetTarget: Tier | null, extra?: number): Promise<void> {
     const kind = getSpecial(this.field)[self];
     if (!isBooster(kind)) return;
-    if (kind === 'drone') { await this.activateDrone(self); return; }
+    if (kind === 'drone') { await this.activateDrone(self, extra); return; }
     const seed = new Set<number>();
     for (const c of boosterTargets(this.field, self, magnetTarget)) seed.add(c);
+    if (extra != null) seed.add(extra);
     expandClearWithSpecials(this.field, seed, Math.random, new Set([self]));
     // Бомба — сразу всё; остальные — постепенно от ближних к дальним (~1с).
     await this.applyAndAnimate(seed, { origin: self, mode: kind === 'bomb' ? 'instant' : 'radial' });
@@ -335,8 +339,9 @@ export class BoardView {
   }
 
   /** Дрон: «плюс» собирается на СТАРТЕ взлёта (радиально от дрона), пока он (подольше) летит к цели. */
-  private async activateDrone(self: number): Promise<void> {
+  private async activateDrone(self: number, extra?: number): Promise<void> {
     const { cells, flightTarget } = droneTargets(this.field, self, Math.random);
+    if (extra != null) cells.add(extra);
     expandClearWithSpecials(this.field, cells, Math.random, new Set([self]));
     const step = applyClear(this.field, cells, [], balance.tierCount, Math.random);
     const flightDur = this.droneFlightDur(self, flightTarget);
@@ -360,19 +365,21 @@ export class BoardView {
     const sp = getSpecial(this.field);
     const ka = sp[a];
     const kb = sp[b];
-    if (ka && kb) { await this.boosterCombo(a, b, ka, kb); return; } // оба бустера → комбо
+    if (isBooster(ka) && isBooster(kb)) { await this.boosterCombo(a, b, ka, kb); return; } // оба бустера → комбо
 
-    // Один бустер + плитка: активируем бустер на его клетке, цель магнита — тир плитки.
-    const self = ka ? a : b;
-    const partner = ka ? b : a;
+    // Ровно один бустер (партнёр — плитка ИЛИ собираемый): активируем бустер на его клетке.
+    const self = isBooster(ka) ? a : b;
+    const partner = isBooster(ka) ? b : a;
     const kind = sp[self];
-    if (!kind) return;
+    if (!isBooster(kind)) return;
     let target: Tier | null = null;
     if (kind === 'magnet') {
       const pt = this.field.cells[partner];
       target = isValidTier(pt) ? pt : pickNearestTileTier(this.field, self, Math.random);
     }
-    await this.activateOneBooster(self, target);
+    // Собираемый свайпнут на бустер → попадает под сбор (включаем его клетку в зону).
+    const extra = isCollectible(sp[partner]) ? partner : undefined;
+    await this.activateOneBooster(self, target, extra);
   }
 
   /** Комбо двух бустеров. dest (куда переехал перетаскиваемый) = b. */
@@ -634,23 +641,35 @@ export class BoardView {
       maxDur = Math.max(maxDur, dur);
       this.animTransform(tile, centerTransform(from.x, from.y, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL, gravityDelay);
     }
+    // Досыпка по СТОЛБЦАМ, СНИЗУ ВВЕРХ и со сдвигом во времени: предметы сыплются по одному (по мере
+    // падения предыдущих), нижние ячейки заполняются первыми. До своего падения плитка НЕВИДИМА
+    // (opacity 0 в backwards-fill) — никаких «висящих» сверху и заполнения сверху-вниз.
+    const byCol = new Map<number, typeof step.refills>();
     for (const r of step.refills) {
-      const to = this.cellCenter(r.idx);
-      const startY = -this.cellH * 0.6;
-      const tile = r.kind ? this.makeCollectibleTile(r.idx, r.kind as CollectibleKind) : this.makeTile(r.idx, r.tier as Tier);
-      const dur = 190 + Math.abs(to.y - startY) * 1.3;
-      maxDur = Math.max(maxDur, dur);
-      // Досыпка НЕВИДИМА, пока не начнётся её падение (opacity 0 в backwards-fill во время задержки),
-      // иначе новые плитки «висят» над полем, дожидаясь волны сбора.
-      tile.animate(
-        [
-          { transform: centerTransform(to.x, startY, 1), opacity: 0, offset: 0 },
-          { transform: centerTransform(to.x, startY, 1), opacity: 1, offset: 0.06 },
-          { transform: centerTransform(to.x, to.y, 1), opacity: 1, offset: 1 },
-        ],
-        { duration: dur, delay: gravityDelay, easing: EASE_FALL, fill: 'backwards' },
-      );
-      newMap.set(r.idx, tile);
+      const cx = r.idx % this.field.cols;
+      let arr = byCol.get(cx);
+      if (!arr) { arr = []; byCol.set(cx, arr); }
+      arr.push(r);
+    }
+    for (const arr of byCol.values()) {
+      arr.sort((p, q) => q.idx - p.idx); // больший idx = ниже → падает первым
+      arr.forEach((r, i) => {
+        const to = this.cellCenter(r.idx);
+        const startY = -this.cellH * 0.6;
+        const tile = r.kind ? this.makeCollectibleTile(r.idx, r.kind as CollectibleKind) : this.makeTile(r.idx, r.tier as Tier);
+        const dur = 190 + Math.abs(to.y - startY) * 1.3;
+        const stagger = i * REFILL_STAGGER;
+        maxDur = Math.max(maxDur, stagger + dur);
+        tile.animate(
+          [
+            { transform: centerTransform(to.x, startY, 1), opacity: 0, offset: 0 },
+            { transform: centerTransform(to.x, startY, 1), opacity: 1, offset: 0.06 },
+            { transform: centerTransform(to.x, to.y, 1), opacity: 1, offset: 1 },
+          ],
+          { duration: dur, delay: gravityDelay + stagger, easing: EASE_FALL, fill: 'backwards' },
+        );
+        newMap.set(r.idx, tile);
+      });
     }
     this.tileByIndex = newMap;
 

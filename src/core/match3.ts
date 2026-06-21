@@ -604,10 +604,9 @@ export function resolveStep(
 
 // ─── Валидность хода / дедлок ───────────────────────────────────────────────────
 
-/** Даст ли свап a↔b матч? Бустер «применяется» всегда; собираемые НЕ свапаются. Поле не меняется (откат). */
+/** Даст ли свап a↔b матч? Бустер «применяется» всегда; собираемый/плитка — если после обмена есть матч. Поле не меняется (откат). */
 export function wouldSwapMatch(field: FieldState, a: number, b: number): boolean {
   const sp = getSpecial(field);
-  if (isCollectible(sp[a]) || isCollectible(sp[b])) return false; // алмаз/молния/сейф нельзя свапать
   if (isBooster(sp[a]) || isBooster(sp[b])) return true;
   swapCells(field, a, b);
   const has = hasMatchAny(field);
