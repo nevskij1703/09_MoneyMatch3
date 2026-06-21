@@ -33,8 +33,8 @@ import { el, centerTransform } from './dom';
 import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
-/** Режим тайминга pop'ов при активации бустера. */
-interface ClearTiming { origin: number | null; mode: 'radial' | 'instant'; }
+/** Режим тайминга pop'ов при активации бустера. `span` — за сколько мс волна добегает до дальней клетки (по умолч. RADIAL_SPAN; дрон передаёт длительность полёта). */
+interface ClearTiming { origin: number | null; mode: 'radial' | 'instant'; span?: number; }
 
 export interface BoardViewCallbacks {
   /** Можно ли сделать ход (хватает ли энергии). false → свайп/тап игнорируется. */
@@ -65,7 +65,7 @@ const EASE_OUT = 'cubic-bezier(0.22,0.61,0.36,1)';
 const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
 const SWAP_DUR = 150;
 const POP_DUR = 230;        // длительность одного pop'а
-const RADIAL_SPAN = 620;    // за столько мс «добегает» волна сбора до самой дальней клетки (≈1с с pop)
+const RADIAL_SPAN = 155;    // за столько мс «добегает» волна сбора до самой дальней клетки (быстро)
 
 // Цели полёта собранных объектов (дизайн-координаты 390×844): 💎 — значение в карте, ⚡ — пилюля Energy.
 const DIAMOND_TARGET = { x: 44, y: 237 } as const;
@@ -339,9 +339,10 @@ export class BoardView {
     const { cells, flightTarget } = droneTargets(this.field, self, Math.random);
     expandClearWithSpecials(this.field, cells, Math.random, new Set([self]));
     const step = applyClear(this.field, cells, [], balance.tierCount, Math.random);
+    const flightDur = this.droneFlightDur(self, flightTarget);
     await Promise.all([
-      this.flyDrone(self, flightTarget, this.droneFlightDur(self, flightTarget)),
-      this.animateStep(step, { origin: self, mode: 'radial' }),
+      this.flyDrone(self, flightTarget, flightDur),
+      this.animateStep(step, { origin: self, mode: 'radial', span: flightDur }), // волна = длительность полёта
     ]);
     await this.runNaturalCascade();
   }
@@ -442,9 +443,10 @@ export class BoardView {
     }
     expandClearWithSpecials(this.field, seed, Math.random, new Set([a, b]));
     const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+    const flightDur = this.droneFlightDur(droneCell, landing);
     await Promise.all([
-      this.flyDrone(droneCell, landing, this.droneFlightDur(droneCell, landing)),
-      this.animateStep(step, { origin: droneCell, mode: 'radial' }),
+      this.flyDrone(droneCell, landing, flightDur),
+      this.animateStep(step, { origin: droneCell, mode: 'radial', span: flightDur }),
     ]);
     await this.runNaturalCascade();
   }
@@ -463,9 +465,11 @@ export class BoardView {
     }
     expandClearWithSpecials(this.field, seed, Math.random, new Set([a, b]));
     const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+    const durs = flights.map(([f, t]) => this.droneFlightDur(f, t));
+    const span = durs.length ? Math.max(...durs) : 460;
     await Promise.all([
-      ...flights.map(([f, t]) => this.flyDrone(f, t, this.droneFlightDur(f, t))),
-      this.animateStep(step, { origin: a, mode: 'radial' }),
+      ...flights.map(([f, t], i) => this.flyDrone(f, t, durs[i])),
+      this.animateStep(step, { origin: a, mode: 'radial', span }),
     ]);
     await this.runNaturalCascade();
   }
@@ -636,7 +640,16 @@ export class BoardView {
       const tile = r.kind ? this.makeCollectibleTile(r.idx, r.kind as CollectibleKind) : this.makeTile(r.idx, r.tier as Tier);
       const dur = 190 + Math.abs(to.y - startY) * 1.3;
       maxDur = Math.max(maxDur, dur);
-      this.animTransform(tile, centerTransform(to.x, startY, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL, gravityDelay);
+      // Досыпка НЕВИДИМА, пока не начнётся её падение (opacity 0 в backwards-fill во время задержки),
+      // иначе новые плитки «висят» над полем, дожидаясь волны сбора.
+      tile.animate(
+        [
+          { transform: centerTransform(to.x, startY, 1), opacity: 0, offset: 0 },
+          { transform: centerTransform(to.x, startY, 1), opacity: 1, offset: 0.06 },
+          { transform: centerTransform(to.x, to.y, 1), opacity: 1, offset: 1 },
+        ],
+        { duration: dur, delay: gravityDelay, easing: EASE_FALL, fill: 'backwards' },
+      );
       newMap.set(r.idx, tile);
     }
     this.tileByIndex = newMap;
@@ -659,7 +672,7 @@ export class BoardView {
       dist.set(idx, d);
       if (d > maxD) maxD = d;
     }
-    const stepMs = maxD > 0 ? RADIAL_SPAN / maxD : 0;
+    const stepMs = maxD > 0 ? (timing.span ?? RADIAL_SPAN) / maxD : 0;
     return (idx) => (dist.get(idx) ?? 0) * stepMs;
   }
 
