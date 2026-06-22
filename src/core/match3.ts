@@ -507,21 +507,26 @@ function rollSafeReward(rng: () => number): SpecialKind {
 }
 
 /**
- * Сработавшие собираемые объекты в текущем clear-set. Триггер: клетка собираемого ∈ clearedSet
- * (прямое попадание бустером) ИЛИ ортогонально рядом схлопывается плитка. diamond/lightning →
- * собираются (idx добавляется в clearedSet, считается в diamonds/energy); safe → ОТКРЫВАЕТСЯ
- * (награда добавляется в spawns и переживает шаг, в clearedSet НЕ попадает). Mutates clearedSet и spawns.
+ * Сработавшие собираемые объекты. Триггер СТРОГО один из двух:
+ *   • ПРЯМОЕ попадание бустером — клетка собираемого ∈ clearedSet;
+ *   • СОСЕДСТВО со схлопом НАТУРАЛЬНОГО матча — только если `byMatch` (рядом ортогонально матчнулась
+ *     плитка). При активации бустера `byMatch=false`: пролетевшая мимо ракета / взрыв рядом, НЕ
+ *     задевший саму клетку, НЕ собирают её.
+ * diamond/lightning → собираются (idx в clearedSet, считается в diamonds/energy); safe → ОТКРЫВАЕТСЯ
+ * (награда в spawns, в clearedSet не попадает). Mutates clearedSet и spawns.
  */
 function resolveCollectibles(
   field: FieldState,
   clearedSet: Set<number>,
   spawns: MatchSpawn[],
   rng: () => number,
+  byMatch: boolean,
 ): Pick<CascadeStep, 'collected' | 'opened' | 'diamonds' | 'energy'> {
   const sp = getSpecial(field);
   const { cols, rows } = field;
-  const clearedTiles = new Set<number>();
-  for (const i of clearedSet) if (isValidTier(field.cells[i])) clearedTiles.add(i);
+  // Плитки, схлопнутые НАТУРАЛЬНЫМ матчем (для соседства) — только когда byMatch.
+  const matchTiles = new Set<number>();
+  if (byMatch) for (const i of clearedSet) if (isValidTier(field.cells[i])) matchTiles.add(i);
   const spawnIdx = new Set(spawns.map((s) => s.idx));
 
   const collected: { idx: number; kind: CollectibleKind }[] = [];
@@ -530,13 +535,13 @@ function resolveCollectibles(
   for (let i = 0; i < sp.length; i++) {
     const k = sp[i];
     if (!isCollectible(k) || spawnIdx.has(i)) continue;
-    let triggered = clearedSet.has(i);
-    if (!triggered) {
+    let triggered = clearedSet.has(i); // прямое попадание (бустер по самой клетке)
+    if (!triggered && byMatch) {        // соседство — только со схлопнутыми МАТЧЕМ плитками
       const { x, y } = idxToXY(i, cols);
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-        if (clearedTiles.has(xyToIdx(nx, ny, cols))) { triggered = true; break; }
+        if (matchTiles.has(xyToIdx(nx, ny, cols))) { triggered = true; break; }
       }
     }
     if (!triggered) continue;
@@ -551,7 +556,9 @@ function resolveCollectibles(
  * Применить готовый clear-set + спавны: сначала разрешить собираемые (сбор алмазов/молний,
  * открытие сейфов в награды), затем обнуление клеток, установка спецобъектов на anchor-клетки
  * (cells=null), гравитация + досыпка. НЕ запускает цепную реакцию бустеров (её делает вызывающий
- * через expandClearWithSpecials). Mutates field и clearedSet. Возвращает дельту для анимации.
+ * через expandClearWithSpecials). `byMatch` — это схлоп НАТУРАЛЬНОГО матча (тогда собираемые ловятся
+ * и по соседству); при активации бустера false — собираемые только при ПРЯМОМ попадании.
+ * Mutates field и clearedSet. Возвращает дельту для анимации.
  */
 export function applyClear(
   field: FieldState,
@@ -559,10 +566,11 @@ export function applyClear(
   spawns: MatchSpawn[],
   tierCount: number,
   rng: () => number = Math.random,
+  byMatch = false,
 ): CascadeStep {
   const sp = getSpecial(field);
   // Собираемые (алмаз/молния → сбор и в clearedSet; сейф → награда в spawns).
-  const coll = resolveCollectibles(field, clearedSet, spawns, rng);
+  const coll = resolveCollectibles(field, clearedSet, spawns, rng, byMatch);
   // Anchor-клетки (бустеры из матчей + награды сейфов) переживают схлоп.
   for (const s of spawns) clearedSet.delete(s.idx);
 
@@ -598,7 +606,7 @@ export function resolveStep(
   const m = findMatches(field, moved, rng);
   if (m.cleared.size === 0 && m.spawns.length === 0) return null;
   const groups = countMatchGroups(field, m.cleared); // считаем ДО обнуления
-  const step = applyClear(field, m.cleared, m.spawns, tierCount, rng);
+  const step = applyClear(field, m.cleared, m.spawns, tierCount, rng, true); // натуральный матч → собираемые ловятся и по соседству
   step.groups = groups;
   return step;
 }

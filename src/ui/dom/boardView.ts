@@ -421,7 +421,7 @@ export class BoardView {
   /** Свайп бустер+плитка с матчем: схлоп матча (родит бустеры) → затем активация бустера; новые — иммунны. */
   private async boosterSwapWithMatch(boosterCell: number, tileCell: number, magnetTarget: Tier | null): Promise<void> {
     const m = findMatches(this.field, [tileCell], Math.random);
-    const step = applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random);
+    const step = applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random, true); // натуральный матч от свайпа
     await this.animateStep(step);
     // Новые позиции после гравитации этого шага (бустер и заспавненные могли «упасть»).
     const moveOf = (idx: number): number => { const f = step.falls.find((ff) => ff.from === idx); return f ? f.to : idx; };

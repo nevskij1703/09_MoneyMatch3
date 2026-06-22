@@ -98,7 +98,8 @@ src/
 1. [boardView.ts](../src/ui/dom/boardView.ts) `pointerdown` запоминает клетку, `pointermove` за
    порогом определяет соседа → `trySwap(a,b)`: `swapCells` + `hasMatchAny` (нет матча → откат назад).
    Собираемые (💎/⚡/🎁) свапаются как фишки (обмен прилипает по матчу; свайп на бустер активирует и собирает их). Валидный ход → `onSpendEnergy()` СРАЗУ (в момент свайпа).
-2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear`: сбор собираемых рядом/бустером →
+2. Каскад-петля: `resolveStep` (`findMatches` → `applyClear(..., byMatch=true)`: собираемые ловятся
+   соседством с НАТУРАЛЬНЫМ матчем; бустеры (`byMatch=false`) — только ПРЯМЫМ попаданием по клетке →
    обнуление → `applyGravityAndRefill` со спавном 💎/⚡/🎁) пока есть матчи. `step.groups` = число
    матч-групп (`countMatchGroups`). Сложный матч → бустер; собранные 💎/⚡ → `onCollect` (полёт в баланс/энергию).
 3. На каждом шаге `onCascadeStep(tiers, groups)` → [GameApp](../src/app/GameApp.ts) копит `baseSum`
