@@ -34,8 +34,12 @@ import { el, centerTransform } from './dom';
 import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
-/** Режим тайминга pop'ов при активации бустера. `span` — за сколько мс волна добегает до дальней клетки (по умолч. RADIAL_SPAN; дрон передаёт длительность полёта). */
-interface ClearTiming { origin: number | null; mode: 'radial' | 'instant'; span?: number; }
+/**
+ * Режим тайминга pop'ов при активации бустера. `span` — за сколько мс волна добегает до дальней
+ * клетки (по умолч. RADIAL_SPAN). `delays` — явная задержка pop'а на клетку (перекрывает radial;
+ * дрон собирает «плюс» с delay=0 на взлёте, цель/цепь — к моменту приземления).
+ */
+interface ClearTiming { origin: number | null; mode: 'radial' | 'instant'; span?: number; delays?: Map<number, number>; }
 
 export interface BoardViewCallbacks {
   /** Можно ли сделать ход (хватает ли энергии). false → свайп/тап игнорируется. */
@@ -67,7 +71,8 @@ const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
 const SWAP_DUR = 150;
 const POP_DUR = 230;        // длительность одного pop'а
 const RADIAL_SPAN = 155;    // за столько мс «добегает» волна сбора до самой дальней клетки (быстро)
-const REFILL_STAGGER = 65;  // сдвиг падения досыпки по столбцу (снизу вверх), мс между предметами
+const REFILL_SPEED = 0.85;  // скорость падения досыпки, px/мс (постоянная → равноудалённость)
+const REFILL_GAP_CELLS = 1.5; // вертикальный зазор между сыплющимися предметами столбца, в ячейках
 
 // Цели полёта собранных объектов (дизайн-координаты 390×844): 💎 — значение в карте, ⚡ — пилюля Energy.
 const DIAMOND_TARGET = { x: 44, y: 237 } as const;
@@ -324,30 +329,54 @@ export class BoardView {
     this.callbacks.onPersist();
   }
 
-  /** Активировать ОДИН бустер на его клетке (магнит — по target; дрон — отдельным путём). `extra` — клетка, добавляемая в зону (собираемый, свайпнутый на бустер). */
-  private async activateOneBooster(self: number, magnetTarget: Tier | null, extra?: number): Promise<void> {
+  /**
+   * Активировать ОДИН бустер на его клетке (магнит — по target; дрон — отдельным путём).
+   * `extra` — клетка в зону (собираемый, свайпнутый на бустер). `immune` — клетки, которые НЕ
+   * задеваются (только что рождённые из матча-свайпа бустеры — короткий иммунитет).
+   */
+  private async activateOneBooster(self: number, magnetTarget: Tier | null, extra?: number, immune?: Set<number>): Promise<void> {
     const kind = getSpecial(this.field)[self];
     if (!isBooster(kind)) return;
-    if (kind === 'drone') { await this.activateDrone(self, extra); return; }
+    if (kind === 'drone') { await this.activateDrone(self, extra, immune); return; }
     const seed = new Set<number>();
     for (const c of boosterTargets(this.field, self, magnetTarget)) seed.add(c);
     if (extra != null) seed.add(extra);
-    expandClearWithSpecials(this.field, seed, Math.random, new Set([self]));
+    const fired = new Set<number>([self]);
+    if (immune) for (const i of immune) fired.add(i);
+    expandClearWithSpecials(this.field, seed, Math.random, fired);
+    if (immune) for (const i of immune) seed.delete(i); // иммунные не сносятся и не чейнятся
     // Бомба — сразу всё; остальные — постепенно от ближних к дальним (~1с).
     await this.applyAndAnimate(seed, { origin: self, mode: kind === 'bomb' ? 'instant' : 'radial' });
     await this.runNaturalCascade();
   }
 
-  /** Дрон: «плюс» собирается на СТАРТЕ взлёта (радиально от дрона), пока он (подольше) летит к цели. */
-  private async activateDrone(self: number, extra?: number): Promise<void> {
-    const { cells, flightTarget } = droneTargets(this.field, self, Math.random);
+  /** Дрон: «плюс» собирается на СТАРТЕ взлёта (delay 0), цель/цепь — к моменту приземления (≈flightDur). */
+  private async activateDrone(self: number, extra?: number, immune?: Set<number>): Promise<void> {
+    const { cells, flightTarget } = droneTargets(this.field, self, Math.random, immune);
     if (extra != null) cells.add(extra);
-    expandClearWithSpecials(this.field, cells, Math.random, new Set([self]));
+    const fired = new Set<number>([self]);
+    if (immune) for (const i of immune) fired.add(i);
+    expandClearWithSpecials(this.field, cells, Math.random, fired);
+    if (immune) for (const i of immune) cells.delete(i);
     const step = applyClear(this.field, cells, [], balance.tierCount, Math.random);
     const flightDur = this.droneFlightDur(self, flightTarget);
+    // delay: «плюс» — на взлёте (0); цель/цепь — к приземлению (flightDur + радиально от точки приземления).
+    const plus = cellsInPlus(this.field, self);
+    const lc = this.cellCenter(flightTarget ?? self);
+    let maxRest = 0;
+    const restD = new Map<number, number>();
+    for (const idx of step.cleared) {
+      if (plus.has(idx)) continue;
+      const cc = this.cellCenter(idx);
+      const d = Math.hypot(cc.x - lc.x, cc.y - lc.y) / this.strideX;
+      restD.set(idx, d); if (d > maxRest) maxRest = d;
+    }
+    const restStep = maxRest > 0 ? RADIAL_SPAN / maxRest : 0;
+    const delays = new Map<number, number>();
+    for (const idx of step.cleared) delays.set(idx, plus.has(idx) ? 0 : flightDur + (restD.get(idx) ?? 0) * restStep);
     await Promise.all([
       this.flyDrone(self, flightTarget, flightDur),
-      this.animateStep(step, { origin: self, mode: 'radial', span: flightDur }), // волна = длительность полёта
+      this.animateStep(step, { origin: self, mode: 'radial', delays }),
     ]);
     await this.runNaturalCascade();
   }
@@ -377,9 +406,28 @@ export class BoardView {
       const pt = this.field.cells[partner];
       target = isValidTier(pt) ? pt : pickNearestTileTier(this.field, self, Math.random);
     }
+    // Свайп бустера на ПЛИТКУ, образовавший матч (5 в ряд и т.п.): сперва схлоп матча (родить
+    // бустеры — напр. магнит из линии-5), и ТОЛЬКО затем активация свайпнутого бустера; новые
+    // бустеры при этом неуязвимы (короткий иммунитет — взрыв их не активирует).
+    if (isValidTier(this.field.cells[partner]) && hasMatchAny(this.field)) {
+      await this.boosterSwapWithMatch(self, partner, target);
+      return;
+    }
     // Собираемый свайпнут на бустер → попадает под сбор (включаем его клетку в зону).
     const extra = isCollectible(sp[partner]) ? partner : undefined;
     await this.activateOneBooster(self, target, extra);
+  }
+
+  /** Свайп бустер+плитка с матчем: схлоп матча (родит бустеры) → затем активация бустера; новые — иммунны. */
+  private async boosterSwapWithMatch(boosterCell: number, tileCell: number, magnetTarget: Tier | null): Promise<void> {
+    const m = findMatches(this.field, [tileCell], Math.random);
+    const step = applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random);
+    await this.animateStep(step);
+    // Новые позиции после гравитации этого шага (бустер и заспавненные могли «упасть»).
+    const moveOf = (idx: number): number => { const f = step.falls.find((ff) => ff.from === idx); return f ? f.to : idx; };
+    const selfNow = moveOf(boosterCell);
+    const immune = new Set<number>(step.spawns.map((s) => moveOf(s.idx)));
+    await this.activateOneBooster(selfNow, magnetTarget, undefined, immune);
   }
 
   /** Комбо двух бустеров. dest (куда переехал перетаскиваемый) = b. */
@@ -520,6 +568,25 @@ export class BoardView {
     sprite.remove();
   }
 
+  /** Радиальная вспышка под открывающимся сейфом (косметика). */
+  private safeFlash(idx: number, delay: number): void {
+    const c = this.cellCenter(idx);
+    const flash = el('div', {
+      cls: 'board-safe-flash',
+      style: `left:0;top:0;width:${this.cellW * 2}px;height:${this.cellH * 2}px;`,
+      parent: this.panel,
+    });
+    flash.animate(
+      [
+        { transform: centerTransform(c.x, c.y, 0.3), opacity: 0, offset: 0 },
+        { transform: centerTransform(c.x, c.y, 0.65), opacity: 0.9, offset: 0.25 },
+        { transform: centerTransform(c.x, c.y, 1.1), opacity: 0, offset: 1 },
+      ],
+      { duration: 400, delay, easing: EASE_OUT, fill: 'backwards' },
+    );
+    window.setTimeout(() => flash.remove(), delay + 430);
+  }
+
   /** Взорвать ВСЕ бустеры, что сейчас на поле (финал магнит-комбо); origin — точка волны сбора. */
   private async detonateAllBoosters(origin: number): Promise<void> {
     const sp = getSpecial(this.field);
@@ -584,7 +651,7 @@ export class BoardView {
 
     const popDelay = this.popDelayFn(step.cleared, timing);
     let maxPop = 0;
-    if (timing && timing.mode === 'radial') for (const idx of step.cleared) maxPop = Math.max(maxPop, popDelay(idx, 0));
+    if (timing && (timing.mode === 'radial' || timing.delays)) for (const idx of step.cleared) maxPop = Math.max(maxPop, popDelay(idx, 0));
     const gravityDelay = maxPop; // гравитация — после волны pop'ов (для каскада/instant = 0)
 
     step.cleared.forEach((idx, k) => {
@@ -608,26 +675,50 @@ export class BoardView {
     this.callbacks.onCascadeStep(step.clearedTiers, step.groups);
 
     // Спавны: бустеры из матчей + награды открытых сейфов (booster или collectible). После волны pop'ов.
+    const fromSet = new Set(step.falls.map((f) => f.from));
+    const openedSet = new Set(step.opened.map((o) => o.idx));
     for (const s of step.spawns) {
+      const c = this.cellCenter(s.idx);
       const old = this.tileByIndex.get(s.idx);
-      if (old) old.remove();
+      const opened = openedSet.has(s.idx);
+      if (opened && old) {
+        // 🎁 Сейф ОТКРЫВАЕТСЯ: чуть сжимается, затем резко растёт и растворяется + радиальная вспышка.
+        old.animate(
+          [
+            { transform: centerTransform(c.x, c.y, 1), opacity: 1, offset: 0 },
+            { transform: centerTransform(c.x, c.y, 0.8), opacity: 1, offset: 0.35 },
+            { transform: centerTransform(c.x, c.y, 1.45), opacity: 0, offset: 1 },
+          ],
+          { duration: 340, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
+        );
+        window.setTimeout(() => old.remove(), gravityDelay + 360);
+        this.safeFlash(s.idx, gravityDelay + 120);
+      } else if (old) {
+        old.remove();
+      }
       const tile = isCollectible(s.kind) ? this.makeCollectibleTile(s.idx, s.kind) : this.makeBoosterTile(s.idx, s.kind);
       this.tileByIndex.set(s.idx, tile);
-      const c = this.cellCenter(s.idx);
-      tile.animate(
-        [
-          { transform: centerTransform(c.x, c.y, 0.2), opacity: 0 },
-          { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
-          { transform: centerTransform(c.x, c.y, 1) },
-        ],
-        { duration: 280, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
-      );
+      // Награда сейфа появляется ПОСЛЕ растворения, с баунсом; если она падает по гравитации — её двигает цикл falls.
+      const willFall = fromSet.has(s.idx);
+      const spawnDelay = opened ? gravityDelay + 240 : gravityDelay;
+      const frames = opened
+        ? [
+            { transform: centerTransform(c.x, c.y, 0.1), opacity: 0, offset: 0 },
+            { transform: centerTransform(c.x, c.y, 1.3), opacity: 1, offset: 0.55 },
+            { transform: centerTransform(c.x, c.y, 0.9), offset: 0.78 },
+            { transform: centerTransform(c.x, c.y, 1), offset: 1 },
+          ]
+        : [
+            { transform: centerTransform(c.x, c.y, 0.2), opacity: 0 },
+            { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
+            { transform: centerTransform(c.x, c.y, 1) },
+          ];
+      if (!willFall) tile.animate(frames, { duration: opened ? 380 : 280, delay: spawnDelay, easing: EASE_OUT, fill: 'backwards' });
     }
 
     // Гравитация (падения уцелевших) + досыпка сверху — стартуют после волны pop'ов.
     const oldMap = this.tileByIndex;
     const newMap = new Map<number, HTMLElement>();
-    const fromSet = new Set(step.falls.map((f) => f.from));
     for (const [idx, tile] of oldMap) if (!fromSet.has(idx)) newMap.set(idx, tile);
 
     let maxDur = POP_DUR;
@@ -651,22 +742,23 @@ export class BoardView {
       if (!arr) { arr = []; byCol.set(cx, arr); }
       arr.push(r);
     }
+    const refillStagger = (REFILL_GAP_CELLS * this.cellH) / REFILL_SPEED; // сдвиг = зазор 1.5 ячейки / скорость
     for (const arr of byCol.values()) {
       arr.sort((p, q) => q.idx - p.idx); // больший idx = ниже → падает первым
       arr.forEach((r, i) => {
         const to = this.cellCenter(r.idx);
-        const startY = -this.cellH * 0.6;
+        const startY = -this.cellH * 0.5; // появляются у верхнего края поля (не «висят» высоко сверху)
         const tile = r.kind ? this.makeCollectibleTile(r.idx, r.kind as CollectibleKind) : this.makeTile(r.idx, r.tier as Tier);
-        const dur = 190 + Math.abs(to.y - startY) * 1.3;
-        const stagger = i * REFILL_STAGGER;
+        const dur = Math.abs(to.y - startY) / REFILL_SPEED; // постоянная скорость → равный шаг между предметами
+        const stagger = i * refillStagger;
         maxDur = Math.max(maxDur, stagger + dur);
         tile.animate(
           [
             { transform: centerTransform(to.x, startY, 1), opacity: 0, offset: 0 },
-            { transform: centerTransform(to.x, startY, 1), opacity: 1, offset: 0.06 },
+            { transform: centerTransform(to.x, startY, 1), opacity: 1, offset: 0.05 },
             { transform: centerTransform(to.x, to.y, 1), opacity: 1, offset: 1 },
           ],
-          { duration: dur, delay: gravityDelay + stagger, easing: EASE_FALL, fill: 'backwards' },
+          { duration: dur, delay: gravityDelay + stagger, easing: 'linear', fill: 'backwards' },
         );
         newMap.set(r.idx, tile);
       });
@@ -679,6 +771,7 @@ export class BoardView {
   /** Задержка pop'а клетки: radial — по дистанции от origin (ближние раньше); instant — 0; иначе — по порядку. */
   private popDelayFn(cleared: number[], timing?: ClearTiming): (idx: number, k: number) => number {
     if (!timing) return (_i, k) => Math.min(k, 6) * 14;
+    if (timing.delays) { const m = timing.delays; return (idx) => m.get(idx) ?? 0; }
     if (timing.mode === 'instant') return () => 0;
     const origin = timing.origin;
     if (origin == null) return (_i, k) => Math.min(k, 6) * 14;
