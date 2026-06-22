@@ -55,7 +55,7 @@ src/
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill (+спавн 💎/⚡/🎁),
 │   │                        resolveCollectibles (сбор/открытие), wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
 │   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials,
-│   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт по приоритету),
+│   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт преим. в обычную плитку),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
 │   ├── money.ts             tierValue=2^t, formatMoney, formatMoneyFull (все знаки), getTierStyle

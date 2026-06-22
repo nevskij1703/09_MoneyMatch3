@@ -256,10 +256,9 @@ export function cellsInPlus(field: FieldState, idx: number): Set<number> {
 }
 
 /**
- * Куда «летит» дрон: приоритет 🧲 magnet → 💣 bomb → 🚀 rocket → 🛸 drone → 💎 diamond →
- * ⚡ lightning → 🎁 safe, среди РАВНЫХ — случайно (rng). Собираемые (алмаз/молния/сейф) — цель
- * ВЫШЕ обычных плиток, но НИЖЕ бустеров. Если ничего из перечисленного нет — случайная
- * клетка с плиткой-деньгами. `exclude` — клетки, которые нельзя выбирать. null — поле пусто.
+ * Куда «летит» дрон: ПРЕИМУЩЕСТВЕННО в обычную клетку-деньги (случайную), НЕ в бустеры и НЕ в
+ * собираемые. Бустеры/собираемые — лишь ФОЛБЭК (по приоритету 🧲→💣→🚀→🛸→💎→⚡→🎁), когда обычных
+ * плиток на поле не осталось. `exclude` — клетки, которые нельзя выбирать. null — поле пусто.
  */
 export function pickDroneFlightTarget(
   field: FieldState,
@@ -270,6 +269,13 @@ export function pickDroneFlightTarget(
   const sp = getSpecial(field);
   const skip = new Set<number>(exclude ?? []);
   skip.add(selfIdx);
+  // Основная цель — обычные плитки-деньги (не спецобъекты).
+  const money: number[] = [];
+  for (let i = 0; i < field.cells.length; i++) {
+    if (!skip.has(i) && !sp[i] && isValidTier(field.cells[i])) money.push(i);
+  }
+  if (money.length) return money[Math.floor(rng() * money.length)];
+  // Фолбэк (обычных плиток нет): бустеры/собираемые по приоритету.
   const priority: SpecialKind[][] = [
     ['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone'], ['diamond'], ['lightning'], ['safe'],
   ];
@@ -281,11 +287,6 @@ export function pickDroneFlightTarget(
     }
     if (cand.length) return cand[Math.floor(rng() * cand.length)];
   }
-  const money: number[] = [];
-  for (let i = 0; i < field.cells.length; i++) {
-    if (!skip.has(i) && !sp[i] && isValidTier(field.cells[i])) money.push(i);
-  }
-  if (money.length) return money[Math.floor(rng() * money.length)];
   return null;
 }
 
