@@ -30,15 +30,15 @@ export interface AnimConfig {
 }
 
 export const DEFAULT_ANIM: AnimConfig = {
-  swapMs: 300,
+  swapMs: 200,
   popMs: 460,
   boosterWaveMs: 310,
-  fallSpeed: 0.45,
+  fallSpeed: 0.5,
   refillGapCells: 1.5,
   spawnMs: 560,
   droneFlightMinMs: 920,
   droneFlightMaxMs: 1900,
-  collectFlyMs: 1080,
+  collectFlyMs: 1000,
   safeOpenMs: 680,
 };
 
