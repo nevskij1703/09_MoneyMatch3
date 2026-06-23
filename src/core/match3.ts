@@ -184,7 +184,7 @@ export function hasMatchAny(field: FieldState): boolean {
  *   magnet   — все клетки тира `targetTier` (его обязан выбрать вызывающий: тир соседа
  *              по свайпу или случайный ближайший — magnet «цвета» не имеет);
  *   drone    — «плюс» вокруг себя (центр + 4 стороны) + клетка-цель полёта (см. droneTargets;
- *              если цель — бустер, его подхватит цепная реакция в expandClearWithSpecials).
+ *              если цель — бустер, его подхватит цепная реакция в collectBoosterBlasts).
  * Если в клетке нет бустера — пустое множество. `rng` нужен дрону (выбор цели полёта).
  */
 export function boosterTargets(field: FieldState, idx: number, targetTier?: Tier | null, rng: () => number = Math.random): Set<number> {
@@ -349,76 +349,50 @@ export function pickRandomPresentTier(field: FieldState, rng: () => number = Mat
   return present[Math.floor(rng() * present.length)];
 }
 
-/**
- * Цепная реакция: пока в clearedSet есть НЕсработавшие БУСТЕРЫ — добавляем их зону
- * поражения (новые задетые бустеры тоже срабатывают). Магниты в цепи бьют по
- * случайному ближайшему тиру. Собираемые (алмаз/молния/сейф), попавшие в зону, в цепь
- * НЕ вступают (не детонируют) — их сбор/открытие делает resolveCollectibles в applyClear.
- * `preFired` — бустеры, уже сработавшие с явной целью (свайп) — их не перезапускаем. Mutates clearedSet.
- */
-export function expandClearWithSpecials(
-  field: FieldState,
-  clearedSet: Set<number>,
-  rng: () => number = Math.random,
-  preFired?: Iterable<number>,
-): void {
-  const sp = getSpecial(field);
-  const fired = new Set<number>(preFired ?? []);
-  const stack: number[] = [];
-  for (const i of clearedSet) if (isBooster(sp[i]) && !fired.has(i)) { fired.add(i); stack.push(i); }
-  while (stack.length) {
-    const i = stack.pop() as number;
-    const target = sp[i] === 'magnet' ? pickNearestTileTier(field, i, rng) : null;
-    for (const t of boosterTargets(field, i, target, rng)) {
-      clearedSet.add(t);
-      if (isBooster(sp[t]) && !fired.has(t)) { fired.add(t); stack.push(t); }
-    }
-  }
-}
-
 /** Одна детонация в цепочке: клетка бустера `idx`, вид `kind`, клетки зоны `cells`; для дрона — цель полёта `flightTarget`. */
 export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; flightTarget: number | null; }
 
 /**
- * Активация бустера `self` + ЦЕПНАЯ реакция задетых бустеров, С УЧЁТОМ зоны КАЖДОГО (в отличие от
- * expandClearWithSpecials, который сливает всё в одно множество). Возвращает детонации в порядке
- * срабатывания (BFS: сначала self, затем задетые волной) — чтобы анимировать цепочку как волну,
- * исходящую из ЦЕНТРА каждого бустера, когда до него добралась предыдущая волна (бустер на пути
- * ракеты взрывается из своего места, а не «всасывается» в общую волну ракеты). Все снесённые клетки
- * добавляются в `clearedSet`. `selfTarget` — цель магнита-self; цепным магнитам берётся ближайший тир.
- * `preFired` — иммунные клетки (не активируются). Поле НЕ мутируется (кроме clearedSet).
+ * ЕДИНАЯ раскрутка детонаций: примарные бустеры `primaries` (каждый со своей целью) + начальная зона
+ * `seedCells` (кастомная зона комбо / собираемый) + ЦЕПНАЯ реакция ВСЕХ задетых бустеров — С УЧЁТОМ
+ * зоны и ЦЕНТРА КАЖДОГО (единая раскрутка детонаций для всех активаций/комбо).
+ * Возвращает детонации в порядке срабатывания (BFS) — чтобы анимировать цепочку волной из центра
+ * каждого бустера, когда до него добралась предыдущая волна (бустер на пути ракеты взрывается из своего
+ * места; дрон — взлетает: в блоке есть flightTarget). `noDetonate` — бустеры-расходники/иммунные (НЕ
+ * детонируют; но в зону/clear попасть могут). Поле НЕ мутируется. Возвращает {blasts, cleared}.
  */
 export function collectBoosterBlasts(
   field: FieldState,
-  self: number,
-  clearedSet: Set<number>,
-  selfTarget: Tier | null = null,
-  preFired: Iterable<number> = [],
+  primaries: { idx: number; target: Tier | null }[],
+  seedCells: Iterable<number> = [],
+  noDetonate: Iterable<number> = [],
   rng: () => number = Math.random,
-): BoosterBlast[] {
+): { blasts: BoosterBlast[]; cleared: Set<number> } {
   const sp = getSpecial(field);
-  const fired = new Set<number>(preFired);
+  const cleared = new Set<number>(seedCells);
+  const fired = new Set<number>(noDetonate);
   const blasts: BoosterBlast[] = [];
   const queue: { idx: number; target: Tier | null }[] = [];
-  if (isBooster(sp[self]) && !fired.has(self)) { fired.add(self); queue.push({ idx: self, target: selfTarget }); }
+  const enqueue = (idx: number, target: Tier | null): void => {
+    if (isBooster(sp[idx]) && !fired.has(idx)) { fired.add(idx); queue.push({ idx, target }); }
+  };
+  for (const p of primaries) enqueue(p.idx, p.target);
+  for (const c of seedCells) enqueue(c, sp[c] === 'magnet' ? pickNearestTileTier(field, c, rng) : null);
   for (let head = 0; head < queue.length; head++) {
     const { idx, target } = queue[head];
-    // Дрон в цепочке: его зону считаем через droneTargets (плюс + СЛУЧАЙНАЯ цель полёта) ОДНИМ роллом и
-    // запоминаем flightTarget — чтобы анимировать его ВЗЛЁТ (а не просто снести клетки общей волной).
+    // Дрон: его зону считаем через droneTargets (плюс + СЛУЧАЙНАЯ цель полёта) ОДНИМ роллом и запоминаем
+    // flightTarget — чтобы анимировать ВЗЛЁТ (а не просто снести клетки общей волной).
     const dt = sp[idx] === 'drone' ? droneTargets(field, idx, rng, fired) : null;
     const zone = dt ? dt.cells : boosterTargets(field, idx, target, rng);
     const cells: number[] = [];
     for (const t of zone) {
-      clearedSet.add(t);
+      cleared.add(t);
       cells.push(t);
-      if (isBooster(sp[t]) && !fired.has(t)) {
-        fired.add(t);
-        queue.push({ idx: t, target: sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null });
-      }
+      enqueue(t, sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null);
     }
     blasts.push({ idx, kind: sp[idx] as SpecialKind, cells, flightTarget: dt ? dt.flightTarget : null });
   }
-  return blasts;
+  return { blasts, cleared };
 }
 
 // ─── Гравитация и досыпка ──────────────────────────────────────────────────────
@@ -601,7 +575,7 @@ function resolveCollectibles(
  * Применить готовый clear-set + спавны: сначала разрешить собираемые (сбор алмазов/молний,
  * открытие сейфов в награды), затем обнуление клеток, установка спецобъектов на anchor-клетки
  * (cells=null), гравитация + досыпка. НЕ запускает цепную реакцию бустеров (её делает вызывающий
- * через expandClearWithSpecials). `byMatch` — это схлоп НАТУРАЛЬНОГО матча (тогда собираемые ловятся
+ * через collectBoosterBlasts). `byMatch` — это схлоп НАТУРАЛЬНОГО матча (тогда собираемые ловятся
  * и по соседству); при активации бустера false — собираемые только при ПРЯМОМ попадании.
  * Mutates field и clearedSet. Возвращает дельту для анимации.
  */

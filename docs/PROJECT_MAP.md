@@ -55,7 +55,7 @@ src/
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (схлоп + спавн бустеров за сложный матч),
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill (+спавн 💎/⚡/🎁),
 │   │                        resolveCollectibles (сбор/открытие), wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
-│   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials/collectBoosterBlasts (цепочка по-бустерно),
+│   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/collectBoosterBlasts (ЕДИНАЯ раскрутка детонаций+цепочки по-бустерно),
 │   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт преим. в обычную плитку),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
@@ -75,7 +75,7 @@ src/
     │   ├── balanceCardView.ts  Карта Баланс+Алмазы (все знаки, авто-уменьшение) + маскот + декор; refresh/bumpBalance; MONEY_TARGET
     │   ├── offersView.ts    Офферы SALE / Watch Ad (тап → заглушка)
     │   ├── infoRowView.ts   Level / Energy / Income (из сейва/конфига)
-    │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, рендер плиток/бустеров/собираемых, постепенная анимация сбора (radial/instant), полёт дрона/💎/⚡, гравитация/досыпка
+    │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, рендер плиток/бустеров/собираемых; ЕДИНЫЙ detonateBlasts (все активации/цепочки/комбо: каждый бустер бьёт из своего центра, дрон взлетает), полёт дрона/💎/⚡, реакция-гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
     │   └── actionBarView.ts 4 круглые кнопки-бустера (счётчик) + нижнее меню 5 вкладок (Игра — центр)
     │

@@ -26,9 +26,9 @@ import { idxToXY, isValidTier, xyToIdx, getSpecial, isBooster, isCollectible } f
 import { balance } from '../../config/balance';
 import {
   areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep,
-  boosterTargets, pickNearestTileTier, expandClearWithSpecials, collectBoosterBlasts, hasAnyValidMove,
+  pickNearestTileTier, collectBoosterBlasts, hasAnyValidMove,
   cellsInSquare, cellsInRows, cellsInCols, cellsInPlus, pickRandomPresentTier,
-  droneTargets, pickDroneFlightTarget,
+  pickDroneFlightTarget,
 } from '../../core/match3';
 import { shuffleBoard } from '../../core/boosters';
 import { anim } from '../../config/anim';
@@ -354,50 +354,73 @@ export class BoardView {
   }
 
   /**
-   * Активировать ОДИН бустер на его клетке (магнит — по target; дрон — отдельным путём).
-   * `extra` — клетка в зону (собираемый, свайпнутый на бустер). `immune` — клетки, которые НЕ
-   * задеваются (только что рождённые из матча-свайпа бустеры — короткий иммунитет).
+   * Активировать ОДИН бустер на его клетке (свайп/тап). Магнит — по `magnetTarget`; ДРОН — взлетает к
+   * цели (единый путь через detonateBlasts, без отдельной ветки). `extra` — собираемый, свайпнутый на
+   * бустер. `immune` — клетки иммунитета (рождённые из матча-свайпа бустеры: не сносятся и не детонируют).
    */
   private async activateOneBooster(self: number, magnetTarget: Tier | null, extra?: number, immune?: Set<number>): Promise<void> {
-    const kind = getSpecial(this.field)[self];
-    if (!isBooster(kind)) return;
-    if (kind === 'drone') { await this.activateDrone(self, extra, immune); return; }
-    // Активация self + ЦЕПНАЯ реакция задетых бустеров, с учётом зоны КАЖДОГО: бустер на пути ракеты
-    // детонирует ИЗ СВОЕГО ЦЕНТРА, когда до него дошла волна (а не «всасывается» в общую волну).
-    const seed = new Set<number>();
-    const blasts = collectBoosterBlasts(this.field, self, seed, magnetTarget, immune, Math.random);
-    if (extra != null) seed.add(extra); // собираемый, свайпнутый на бустер, попадает в зону
-    if (immune) for (const i of immune) seed.delete(i); // иммунные не сносятся
-    const { delays, flights } = this.boosterChainTiming(blasts, extra);
-    // Тайлы задетых дронов капчим ДО клира (animateStep удалит их из tileByIndex) — спрячем на взлёте.
-    const droneTiles = new Map<number, HTMLElement>();
-    for (const fl of flights) { const t = this.tileByIndex.get(fl.from); if (t) droneTiles.set(fl.from, t); }
-    // Завод: пульсирует ТОЛЬКО активированный бустер; задетые по цепочке детонируют по приходу волны
-    // (дрон — ВЗЛЕТАЕТ к своей цели; бомба/ракета/магнит — бьют из своего центра).
-    await this.pulseBoosters([self]);
-    await Promise.all([
-      this.applyAndAnimate(seed, { origin: self, mode: 'radial', delays }),
-      ...flights.map((fl) => this.flyChainedDrone(fl.from, fl.to, fl.at, fl.dur, droneTiles.get(fl.from))),
-    ]);
+    if (!isBooster(getSpecial(this.field)[self])) return;
+    await this.pulseBoosters([self]); // заводится ТОЛЬКО активированный; задетые детонируют по приходу волны
+    await this.detonateBlasts({ primaries: [{ idx: self, target: magnetTarget }], origin: self, extra, noDetonate: immune, keep: immune });
     await this.runNaturalCascade();
   }
 
   /**
-   * Тайминги цепочки детонаций: каждый бустер бьёт ИЗ СВОЕГО ЦЕНТРА начиная с fireTime (когда волна
-   * предыдущего до него дошла; self → 0). Бомба — мгновенно (вся зона разом); ракета/магнит — радиально
-   * по дистанции; ДРОН — собирает «плюс» на взлёте (fireTime) и улетает, цель сносится в приземлении
-   * (fireTime + полёт). Возвращает карту задержек pop'ов + список взлётов дронов (для анимации спрайтов).
+   * ЕДИНЫЙ детонатор бустеров (одна точка анимации всех активаций/цепочек/комбо). Сносит зоны примарных
+   * бустеров `primaries` + кастомную зону комбо `baseCells` + ЦЕПНУЮ реакцию всех задетых. Каждый бустер
+   * бьёт волной ИЗ СВОЕГО ЦЕНТРА в момент прихода волны; бомба — мгновенно; ДРОН — взлетает и летит к
+   * своей цели (tileByIndex-безопасно: тайл капчим до клира, прячем на взлёте, летит спрайт). `noDetonate`
+   * — расходники (сносятся, но не детонируют: свайпнутые в комбо). `keep` — иммунные (НЕ сносятся).
+   * `extra` — собираемый (pop сразу). Гравитация/досыпка — в animateStep. Каскад НЕ запускает.
    */
-  private boosterChainTiming(
+  private async detonateBlasts(opts: {
+    primaries: { idx: number; target: Tier | null }[];
+    origin: number;
+    baseCells?: Iterable<number>;
+    baseInstant?: boolean;
+    extra?: number;
+    noDetonate?: Iterable<number>;
+    keep?: Iterable<number>;
+  }): Promise<void> {
+    const baseCells = opts.baseCells ? [...opts.baseCells] : [];
+    const { blasts, cleared } = collectBoosterBlasts(this.field, opts.primaries, baseCells, opts.noDetonate ?? [], Math.random);
+    if (opts.extra != null) cleared.add(opts.extra);
+    if (opts.keep) for (const i of opts.keep) cleared.delete(i); // иммунные не сносятся
+    const { delays, flights } = this.boosterBlastTiming(blasts, baseCells, opts.origin, !!opts.baseInstant, opts.extra);
+    // Тайлы взлетающих дронов капчим ДО клира (animateStep уберёт их из tileByIndex) — спрячем на взлёте.
+    const droneTiles = new Map<number, HTMLElement>();
+    for (const fl of flights) { const t = this.tileByIndex.get(fl.from); if (t) droneTiles.set(fl.from, t); }
+    const step = applyClear(this.field, cleared, [], balance.tierCount, Math.random);
+    await Promise.all([
+      this.animateStep(step, { origin: opts.origin, mode: 'radial', delays }),
+      ...flights.map((fl) => this.flyChainedDrone(fl.from, fl.to, fl.at, fl.dur, droneTiles.get(fl.from))),
+    ]);
+  }
+
+  /**
+   * Тайминги детонаций. База (зона комбо/примара) — радиально от origin (или мгновенно), с 0. Каждый
+   * блок-бустер бьёт ИЗ СВОЕГО ЦЕНТРА с fireTime (когда волна до него дошла): бомба — мгновенно;
+   * ракета/магнит — радиально по дистанции; ДРОН — «плюс» на взлёте (fireTime), цель в приземлении
+   * (fireTime + полёт). Берёт МИНИМАЛЬНУЮ задержку на клетку (пересечения зон). + взлёты дронов.
+   */
+  private boosterBlastTiming(
     blasts: BoosterBlast[],
+    baseCells: number[],
+    origin: number,
+    baseInstant: boolean,
     extra?: number,
   ): { delays: Map<number, number>; flights: { from: number; to: number; at: number; dur: number }[] } {
     const stepMs = anim.boosterWaveMs / Math.max(this.field.cols, this.field.rows); // скорость волны (мс/клетку)
     const delays = new Map<number, number>();
     const flights: { from: number; to: number; at: number; dur: number }[] = [];
     const setMin = (idx: number, d: number): void => { const cur = delays.get(idx); if (cur == null || d < cur) delays.set(idx, d); };
+    const oc = this.cellCenter(origin);
+    for (const c of baseCells) {
+      const cc = this.cellCenter(c);
+      setMin(c, baseInstant ? 0 : (Math.hypot(cc.x - oc.x, cc.y - oc.y) / this.strideX) * stepMs);
+    }
     for (const blast of blasts) {
-      const fireTime = delays.get(blast.idx) ?? 0; // когда волна дошла до этого бустера (self → 0)
+      const fireTime = delays.get(blast.idx) ?? 0; // когда волна дошла до этого бустера
       if (blast.kind === 'drone') {
         const dur = blast.flightTarget != null ? this.droneFlightDur(blast.idx, blast.flightTarget) : 0;
         for (const c of blast.cells) setMin(c, c === blast.flightTarget ? fireTime + dur : fireTime); // плюс — на взлёте, цель — в приземлении
@@ -413,43 +436,11 @@ export class BoardView {
     return { delays, flights };
   }
 
-  /** Задетый по цепочке дрон: на своём fireTime прячет свой (попадающий под pop) тайл и улетает к цели. */
+  /** Взлетающий дрон: на своём `at` прячет свой (попадающий под pop) тайл и улетает спрайтом к цели. */
   private async flyChainedDrone(fromIdx: number, toIdx: number, at: number, dur: number, origTile?: HTMLElement): Promise<void> {
     if (at > 0) await this.delay(at);
     if (origTile) origTile.style.visibility = 'hidden'; // pop этого тайла станет невидимым — летит спрайт
-    await this.flyDrone(fromIdx, toIdx, dur);
-  }
-
-  /** Дрон: «плюс» собирается на СТАРТЕ взлёта (delay 0), цель/цепь — к моменту приземления (≈flightDur). */
-  private async activateDrone(self: number, extra?: number, immune?: Set<number>): Promise<void> {
-    await this.pulseBoosters([self]); // дрон «заводится» на месте, затем взлетает
-    const { cells, flightTarget } = droneTargets(this.field, self, Math.random, immune);
-    if (extra != null) cells.add(extra);
-    const fired = new Set<number>([self]);
-    if (immune) for (const i of immune) fired.add(i);
-    expandClearWithSpecials(this.field, cells, Math.random, fired);
-    if (immune) for (const i of immune) cells.delete(i);
-    const step = applyClear(this.field, cells, [], balance.tierCount, Math.random);
-    const flightDur = this.droneFlightDur(self, flightTarget);
-    // delay: «плюс» — на взлёте (0); цель/цепь — к приземлению (flightDur + радиально от точки приземления).
-    const plus = cellsInPlus(this.field, self);
-    const lc = this.cellCenter(flightTarget ?? self);
-    let maxRest = 0;
-    const restD = new Map<number, number>();
-    for (const idx of step.cleared) {
-      if (plus.has(idx)) continue;
-      const cc = this.cellCenter(idx);
-      const d = Math.hypot(cc.x - lc.x, cc.y - lc.y) / this.strideX;
-      restD.set(idx, d); if (d > maxRest) maxRest = d;
-    }
-    const restStep = maxRest > 0 ? anim.boosterWaveMs / maxRest : 0;
-    const delays = new Map<number, number>();
-    for (const idx of step.cleared) delays.set(idx, plus.has(idx) ? 0 : flightDur + (restD.get(idx) ?? 0) * restStep);
-    await Promise.all([
-      this.flyDrone(self, flightTarget, flightDur),
-      this.animateStep(step, { origin: self, mode: 'radial', delays }),
-    ]);
-    await this.runNaturalCascade();
+    await this.flyDroneSprite(fromIdx, toIdx, dur);
   }
 
   /** Длительность полёта дрона ~ дистанции: от anim.droneFlightMinMs (близко) до droneFlightMaxMs (далеко). */
@@ -510,33 +501,32 @@ export class BoardView {
     const isD = (k: SpecialKind): boolean => k === 'drone';
 
     await this.pulseBoosters([a, b]); // оба свайпнутых бустера «заводятся» перед комбо
-    if (isM(ka) && isM(kb)) { await this.clearWholeBoard(b); return; }       // 🧲+🧲 → всё поле
+    if (isM(ka) && isM(kb)) { await this.clearWholeBoard(b, a); return; }     // 🧲+🧲 → всё поле
     if (isM(ka) || isM(kb)) { await this.magnetCombo(a, b, ka, kb); return; } // 🧲+любой → спавн партнёра
     if (isD(ka) && isD(kb)) { await this.droneDroneCombo(a, b); return; }     // 🛸+🛸 → 3 дрона (2+1)
     if (isD(ka) || isD(kb)) { await this.droneCarryCombo(a, b, ka, kb); return; } // 🛸+💣/🚀 → уносит бустер
 
-    const seed = new Set<number>([a, b]);
-    let mode: 'radial' | 'instant' = 'radial';
-    if (isB(ka) && isB(kb)) {
-      for (const c of cellsInSquare(this.field, b, 2)) seed.add(c);       // 💣+💣 → 5×5 (сразу)
-      mode = 'instant';
-    } else if ((isB(ka) && isR(kb)) || (isR(ka) && isB(kb))) {
-      for (const c of cellsInRows(this.field, b, 1)) seed.add(c);        // 💣+🚀 → 3 ряда…
-      for (const c of cellsInCols(this.field, b, 1)) seed.add(c);        // …+ 3 столбца
+    // Зонные комбо: 💣+💣 → 5×5 (мгновенно); 💣+🚀 → 3 ряда+3 столбца; 🚀+🚀 → крест. Бустеры, попавшие
+    // в зону, детонируют из своих центров (дрон взлетает) — единый detonateBlasts; свайпнутые расходуются.
+    const base = new Set<number>([a, b]);
+    let baseInstant = false;
+    if (isB(ka) && isB(kb)) { for (const c of cellsInSquare(this.field, b, 2)) base.add(c); baseInstant = true; }
+    else if ((isB(ka) && isR(kb)) || (isR(ka) && isB(kb))) {
+      for (const c of cellsInRows(this.field, b, 1)) base.add(c);
+      for (const c of cellsInCols(this.field, b, 1)) base.add(c);
     } else {
-      for (const c of cellsInRows(this.field, b, 0)) seed.add(c);        // 🚀+🚀 → крест
-      for (const c of cellsInCols(this.field, b, 0)) seed.add(c);
+      for (const c of cellsInRows(this.field, b, 0)) base.add(c);
+      for (const c of cellsInCols(this.field, b, 0)) base.add(c);
     }
-    expandClearWithSpecials(this.field, seed, Math.random, new Set([a, b]));
-    await this.applyAndAnimate(seed, { origin: b, mode });
+    await this.detonateBlasts({ primaries: [], origin: b, baseCells: base, baseInstant, noDetonate: [a, b] });
     await this.runNaturalCascade();
   }
 
-  /** 🧲+🧲 — собрать ВСЁ поле (постепенно от точки свайпа к краям). */
-  private async clearWholeBoard(origin: number): Promise<void> {
-    const seed = new Set<number>();
-    for (let i = 0; i < this.field.cells.length; i++) seed.add(i);
-    await this.applyAndAnimate(seed, { origin, mode: 'radial' });
+  /** 🧲+🧲 — собрать ВСЁ поле (волной от точки свайпа); бустеры на поле детонируют из своих центров. */
+  private async clearWholeBoard(origin: number, other: number): Promise<void> {
+    const base = new Set<number>();
+    for (let i = 0; i < this.field.cells.length; i++) base.add(i);
+    await this.detonateBlasts({ primaries: [], origin, baseCells: base, noDetonate: [origin, other] });
     await this.runNaturalCascade();
   }
 
@@ -556,49 +546,45 @@ export class BoardView {
     await this.runNaturalCascade();
   }
 
-  /** 🛸+💣/🚀 — дрон «уносит» бустер: летит к точке приземления и детонирует его там. */
+  /** 🛸+💣/🚀 — дрон «уносит» бустер: «плюс» на взлёте, зона несомого бустера сносится в приземлении. */
   private async droneCarryCombo(a: number, b: number, ka: SpecialKind, kb: SpecialKind): Promise<void> {
     const droneCell = ka === 'drone' ? a : b;
     const carried: SpecialKind = ka === 'drone' ? kb : ka; // bomb / rocket-h / rocket-v
-    // Точка приземления — обычная плитка среди ОСТАВШИХСЯ (оба свайпнутых исключены; фолбэк — спецобъект).
     const landing = pickDroneFlightTarget(this.field, droneCell, Math.random, [a, b]);
-    const seed = new Set<number>([a, b]);
-    for (const c of cellsInPlus(this.field, droneCell)) seed.add(c); // «плюс» на взлёте
+    const plus = cellsInPlus(this.field, droneCell); // «плюс» — на взлёте
+    const seed = new Set<number>([a, b, ...plus]);
     if (landing != null) {
       if (carried === 'bomb') for (const c of cellsInSquare(this.field, landing, balance.match.bombRadius)) seed.add(c);
       else if (carried === 'rocket-h') for (const c of cellsInRows(this.field, landing, 0)) seed.add(c);
       else if (carried === 'rocket-v') for (const c of cellsInCols(this.field, landing, 0)) seed.add(c);
     }
-    expandClearWithSpecials(this.field, seed, Math.random, new Set([a, b]));
-    const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
+    // Зацепить бустеры, попавшие в зону (детонируют в приземлении). Свайпнутые a,b — расходники.
+    const { cleared } = collectBoosterBlasts(this.field, [], seed, [a, b], Math.random);
     const flightDur = this.droneFlightDur(droneCell, landing);
+    const stepMs = anim.boosterWaveMs / Math.max(this.field.cols, this.field.rows);
+    const lc = this.cellCenter(landing ?? droneCell);
+    const delays = new Map<number, number>();
+    for (const c of cleared) {
+      if (plus.has(c)) { delays.set(c, 0); continue; } // плюс — на взлёте
+      const cc = this.cellCenter(c);
+      delays.set(c, flightDur + (Math.hypot(cc.x - lc.x, cc.y - lc.y) / this.strideX) * stepMs); // зона — в приземлении
+    }
+    const droneTile = this.tileByIndex.get(droneCell); // капчим ДО клира — спрячем на взлёте
+    const step = applyClear(this.field, cleared, [], balance.tierCount, Math.random);
     await Promise.all([
-      this.flyDrone(droneCell, landing, flightDur),
-      this.animateStep(step, { origin: droneCell, mode: 'radial', span: flightDur }),
+      this.flyChainedDrone(droneCell, landing ?? droneCell, 0, flightDur, droneTile),
+      this.animateStep(step, { origin: droneCell, mode: 'radial', delays }),
     ]);
     await this.runNaturalCascade();
   }
 
-  /** 🛸+🛸 — в воздух взлетают 3 дрона (2 свайпнутых + 1 бонусный со случайной плитки). */
+  /** 🛸+🛸 — в воздух взлетают 3 дрона (2 свайпнутых + 1 бонусный со случайной клетки-деньги). */
   private async droneDroneCombo(a: number, b: number): Promise<void> {
-    const origins: number[] = [a, b];
     const bonus = this.randomMoneyCell([a, b]);
-    if (bonus != null) origins.push(bonus);
-    const seed = new Set<number>([a, b]);
-    const flights: Array<[number, number]> = [];
-    for (const o of origins) {
-      for (const c of cellsInPlus(this.field, o)) seed.add(c);
-      const ft = pickDroneFlightTarget(this.field, o, Math.random, [a, b]);
-      if (ft != null) { seed.add(ft); flights.push([o, ft]); }
-    }
-    expandClearWithSpecials(this.field, seed, Math.random, new Set([a, b]));
-    const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
-    const durs = flights.map(([f, t]) => this.droneFlightDur(f, t));
-    const span = durs.length ? Math.max(...durs) : 460;
-    await Promise.all([
-      ...flights.map(([f, t], i) => this.flyDrone(f, t, durs[i])),
-      this.animateStep(step, { origin: a, mode: 'radial', span }),
-    ]);
+    if (bonus != null) getSpecial(this.field)[bonus] = 'drone'; // временно: бонусный дрон взлетит из этой клетки
+    const primaries: { idx: number; target: Tier | null }[] = [{ idx: a, target: null }, { idx: b, target: null }];
+    if (bonus != null) primaries.push({ idx: bonus, target: null });
+    await this.detonateBlasts({ primaries, origin: a }); // все 3 — примарные дроны: взлетают разом, цепляют прочее
     await this.runNaturalCascade();
   }
 
@@ -613,12 +599,10 @@ export class BoardView {
     return money.length ? money[Math.floor(Math.random() * money.length)] : null;
   }
 
-  /** Визуал: дрон «взлетает» из fromIdx и летит дугой к toIdx за `dur` мс (косметика; клир — отдельно). */
-  private async flyDrone(fromIdx: number, toIdx: number | null, dur = anim.droneFlightMinMs): Promise<void> {
+  /** Визуал: спрайт дрона летит дугой из fromIdx в toIdx за `dur` мс (исходный тайл прячет ВЫЗЫВАЮЩИЙ). */
+  private async flyDroneSprite(fromIdx: number, toIdx: number | null, dur = anim.droneFlightMinMs): Promise<void> {
     const from = this.cellCenter(fromIdx);
     const to = toIdx != null ? this.cellCenter(toIdx) : from;
-    const orig = this.tileByIndex.get(fromIdx);
-    if (orig) orig.style.visibility = 'hidden'; // прячем исходный дрон-тайл на время полёта
     const sprite = el('img', {
       cls: 'board-drone-fly',
       style: `width:${this.iconSize}px;height:${this.iconSize}px;`,
@@ -687,27 +671,16 @@ export class BoardView {
     );
   }
 
-  /** Взорвать ВСЕ бустеры, что сейчас на поле (финал магнит-комбо); origin — точка волны сбора. */
+  /** Взорвать ВСЕ бустеры на поле (финал магнит-комбо): каждый детонирует из своего центра, дрон взлетает. */
   private async detonateAllBoosters(origin: number): Promise<void> {
     const sp = getSpecial(this.field);
-    const seed = new Set<number>();
-    const fired = new Set<number>();
+    const primaries: { idx: number; target: Tier | null }[] = [];
     for (let i = 0; i < sp.length; i++) {
-      if (!isBooster(sp[i])) continue;
-      fired.add(i);
-      const target = sp[i] === 'magnet' ? pickNearestTileTier(this.field, i, Math.random) : null;
-      for (const c of boosterTargets(this.field, i, target)) seed.add(c);
+      if (isBooster(sp[i])) primaries.push({ idx: i, target: sp[i] === 'magnet' ? pickNearestTileTier(this.field, i, Math.random) : null });
     }
-    if (!seed.size) return;
-    expandClearWithSpecials(this.field, seed, Math.random, fired);
-    await this.pulseBoosters([...fired]); // заспавненные бустеры «заводятся» перед авто-взрывом
-    await this.applyAndAnimate(seed, { origin, mode: 'radial' });
-  }
-
-  /** applyClear (без спавнов) + анимация шага (с опц. таймингом сбора). */
-  private async applyAndAnimate(seed: Set<number>, timing?: ClearTiming): Promise<void> {
-    const step = applyClear(this.field, seed, [], balance.tierCount, Math.random);
-    await this.animateStep(step, timing);
+    if (!primaries.length) return;
+    await this.pulseBoosters(primaries.map((p) => p.idx)); // заспавненные бустеры «заводятся» перед авто-взрывом
+    await this.detonateBlasts({ primaries, origin });
   }
 
   /** Анимировать обмен элементов двух клеток + переставить их в карте. */
