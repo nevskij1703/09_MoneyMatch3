@@ -376,8 +376,8 @@ export function expandClearWithSpecials(
   }
 }
 
-/** Одна детонация в цепочке: клетка бустера `idx`, его вид `kind` и все клетки его зоны `cells`. */
-export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; }
+/** Одна детонация в цепочке: клетка бустера `idx`, вид `kind`, клетки зоны `cells`; для дрона — цель полёта `flightTarget`. */
+export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; flightTarget: number | null; }
 
 /**
  * Активация бустера `self` + ЦЕПНАЯ реакция задетых бустеров, С УЧЁТОМ зоны КАЖДОГО (в отличие от
@@ -403,8 +403,12 @@ export function collectBoosterBlasts(
   if (isBooster(sp[self]) && !fired.has(self)) { fired.add(self); queue.push({ idx: self, target: selfTarget }); }
   for (let head = 0; head < queue.length; head++) {
     const { idx, target } = queue[head];
+    // Дрон в цепочке: его зону считаем через droneTargets (плюс + СЛУЧАЙНАЯ цель полёта) ОДНИМ роллом и
+    // запоминаем flightTarget — чтобы анимировать его ВЗЛЁТ (а не просто снести клетки общей волной).
+    const dt = sp[idx] === 'drone' ? droneTargets(field, idx, rng, fired) : null;
+    const zone = dt ? dt.cells : boosterTargets(field, idx, target, rng);
     const cells: number[] = [];
-    for (const t of boosterTargets(field, idx, target, rng)) {
+    for (const t of zone) {
       clearedSet.add(t);
       cells.push(t);
       if (isBooster(sp[t]) && !fired.has(t)) {
@@ -412,7 +416,7 @@ export function collectBoosterBlasts(
         queue.push({ idx: t, target: sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null });
       }
     }
-    blasts.push({ idx, kind: sp[idx] as SpecialKind, cells });
+    blasts.push({ idx, kind: sp[idx] as SpecialKind, cells, flightTarget: dt ? dt.flightTarget : null });
   }
   return blasts;
 }

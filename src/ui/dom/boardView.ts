@@ -368,33 +368,56 @@ export class BoardView {
     const blasts = collectBoosterBlasts(this.field, self, seed, magnetTarget, immune, Math.random);
     if (extra != null) seed.add(extra); // собираемый, свайпнутый на бустер, попадает в зону
     if (immune) for (const i of immune) seed.delete(i); // иммунные не сносятся
-    // Завод: пульсирует ТОЛЬКО активированный бустер; задетые по цепочке детонируют по приходу волны.
+    const { delays, flights } = this.boosterChainTiming(blasts, extra);
+    // Тайлы задетых дронов капчим ДО клира (animateStep удалит их из tileByIndex) — спрячем на взлёте.
+    const droneTiles = new Map<number, HTMLElement>();
+    for (const fl of flights) { const t = this.tileByIndex.get(fl.from); if (t) droneTiles.set(fl.from, t); }
+    // Завод: пульсирует ТОЛЬКО активированный бустер; задетые по цепочке детонируют по приходу волны
+    // (дрон — ВЗЛЕТАЕТ к своей цели; бомба/ракета/магнит — бьют из своего центра).
     await this.pulseBoosters([self]);
-    await this.applyAndAnimate(seed, { origin: self, mode: 'radial', delays: this.boosterChainDelays(blasts, extra) });
+    await Promise.all([
+      this.applyAndAnimate(seed, { origin: self, mode: 'radial', delays }),
+      ...flights.map((fl) => this.flyChainedDrone(fl.from, fl.to, fl.at, fl.dur, droneTiles.get(fl.from))),
+    ]);
     await this.runNaturalCascade();
   }
 
   /**
-   * Задержки pop'а для цепочки детонаций: каждый бустер бьёт волной ИЗ СВОЕГО ЦЕНТРА; цепной —
-   * начиная с момента, когда волна предыдущего до него дошла (fireTime). Бомба бьёт мгновенно (вся
-   * зона разом), ракета/магнит/дрон — радиально по дистанции. Возвращает Map<idx, задержка мс>.
+   * Тайминги цепочки детонаций: каждый бустер бьёт ИЗ СВОЕГО ЦЕНТРА начиная с fireTime (когда волна
+   * предыдущего до него дошла; self → 0). Бомба — мгновенно (вся зона разом); ракета/магнит — радиально
+   * по дистанции; ДРОН — собирает «плюс» на взлёте (fireTime) и улетает, цель сносится в приземлении
+   * (fireTime + полёт). Возвращает карту задержек pop'ов + список взлётов дронов (для анимации спрайтов).
    */
-  private boosterChainDelays(blasts: BoosterBlast[], extra?: number): Map<number, number> {
+  private boosterChainTiming(
+    blasts: BoosterBlast[],
+    extra?: number,
+  ): { delays: Map<number, number>; flights: { from: number; to: number; at: number; dur: number }[] } {
     const stepMs = anim.boosterWaveMs / Math.max(this.field.cols, this.field.rows); // скорость волны (мс/клетку)
-    const delay = new Map<number, number>();
-    const setMin = (idx: number, d: number): void => { const cur = delay.get(idx); if (cur == null || d < cur) delay.set(idx, d); };
+    const delays = new Map<number, number>();
+    const flights: { from: number; to: number; at: number; dur: number }[] = [];
+    const setMin = (idx: number, d: number): void => { const cur = delays.get(idx); if (cur == null || d < cur) delays.set(idx, d); };
     for (const blast of blasts) {
-      const fireTime = delay.get(blast.idx) ?? 0; // когда волна дошла до этого бустера (self → 0)
-      const center = this.cellCenter(blast.idx);
-      const instant = blast.kind === 'bomb';
-      for (const c of blast.cells) {
-        if (instant) { setMin(c, fireTime); continue; }
-        const cc = this.cellCenter(c);
-        setMin(c, fireTime + (Math.hypot(cc.x - center.x, cc.y - center.y) / this.strideX) * stepMs);
+      const fireTime = delays.get(blast.idx) ?? 0; // когда волна дошла до этого бустера (self → 0)
+      if (blast.kind === 'drone') {
+        const dur = blast.flightTarget != null ? this.droneFlightDur(blast.idx, blast.flightTarget) : 0;
+        for (const c of blast.cells) setMin(c, c === blast.flightTarget ? fireTime + dur : fireTime); // плюс — на взлёте, цель — в приземлении
+        if (blast.flightTarget != null) flights.push({ from: blast.idx, to: blast.flightTarget, at: fireTime, dur });
+      } else if (blast.kind === 'bomb') {
+        for (const c of blast.cells) setMin(c, fireTime); // взрыв 3×3 разом
+      } else {
+        const center = this.cellCenter(blast.idx);
+        for (const c of blast.cells) { const cc = this.cellCenter(c); setMin(c, fireTime + (Math.hypot(cc.x - center.x, cc.y - center.y) / this.strideX) * stepMs); }
       }
     }
     if (extra != null) setMin(extra, 0);
-    return delay;
+    return { delays, flights };
+  }
+
+  /** Задетый по цепочке дрон: на своём fireTime прячет свой (попадающий под pop) тайл и улетает к цели. */
+  private async flyChainedDrone(fromIdx: number, toIdx: number, at: number, dur: number, origTile?: HTMLElement): Promise<void> {
+    if (at > 0) await this.delay(at);
+    if (origTile) origTile.style.visibility = 'hidden'; // pop этого тайла станет невидимым — летит спрайт
+    await this.flyDrone(fromIdx, toIdx, dur);
   }
 
   /** Дрон: «плюс» собирается на СТАРТЕ взлёта (delay 0), цель/цепь — к моменту приземления (≈flightDur). */
