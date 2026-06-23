@@ -131,11 +131,11 @@ export const balance: Balance = {
     costPerMove: 1,    // −1 за ход (успешный свап с матчем)
   },
   collect: {
-    diamondChance: 0.01,   // ~1% досыпанных клеток — алмаз
-    lightningChance: 0.03, // ~3% — молния (энергия)
-    safeChance: 0.05,      // ~5% — сейф (лутбокс)
+    diamondChance: 0.005,  // ~0.5% досыпанных клеток — алмаз
+    lightningChance: 0.01, // ~1% — молния (энергия)
+    safeChance: 0.01,      // ~1% — сейф (лутбокс)
     lightningEnergy: 3,    // молния → +3 энергии
-    safeReward: { booster: 0.6, diamond: 0.25, lightning: 0.15 }, // что выпадает из сейфа
+    safeReward: { booster: 0.6, diamond: 0.15, lightning: 0.15 }, // что выпадает из сейфа (нормируется по сумме)
   },
   boosters: {
     // Кнопки-бустеры (реальные эффекты — будущая фаза). Иконки — public/assets/boosters/<id>.png.

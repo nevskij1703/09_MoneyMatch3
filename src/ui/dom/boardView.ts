@@ -619,6 +619,33 @@ export class BoardView {
     window.setTimeout(() => flash.remove(), delay + anim.safeOpenMs + 60);
   }
 
+  /**
+   * Сейф доехал до клетки приземления (x,y) к моменту `landTime` (мс от старта шага): сейф растворяется,
+   * под ним вспышка, награда баунсит на ЭТОМ ЖЕ месте. Чинит глитч «награда спавнится там, где сейф
+   * начинал открываться» — для падающих сейфов всё происходит в точке приземления, без наложений.
+   */
+  private openSafeAt(safeTile: HTMLElement, rewardTile: HTMLElement, x: number, y: number, landIdx: number, landTime: number): void {
+    safeTile.animate(
+      [
+        { transform: centerTransform(x, y, 1), opacity: 1, offset: 0 },
+        { transform: centerTransform(x, y, 0.8), opacity: 1, offset: 0.35 },
+        { transform: centerTransform(x, y, 1.45), opacity: 0, offset: 1 },
+      ],
+      { duration: anim.safeOpenMs, delay: landTime, easing: EASE_OUT, fill: 'forwards' },
+    );
+    window.setTimeout(() => safeTile.remove(), landTime + anim.safeOpenMs + 40);
+    this.safeFlash(landIdx, landTime + anim.safeOpenMs * 0.35);
+    rewardTile.animate(
+      [
+        { transform: centerTransform(x, y, 0.1), opacity: 0, offset: 0 },
+        { transform: centerTransform(x, y, 1.3), opacity: 1, offset: 0.55 },
+        { transform: centerTransform(x, y, 0.9), offset: 0.78 },
+        { transform: centerTransform(x, y, 1), offset: 1 },
+      ],
+      { duration: Math.round(anim.spawnMs * 1.35), delay: landTime + anim.safeOpenMs * 0.7, easing: EASE_OUT, fill: 'backwards' },
+    );
+  }
+
   /** Взорвать ВСЕ бустеры, что сейчас на поле (финал магнит-комбо); origin — точка волны сбора. */
   private async detonateAllBoosters(origin: number): Promise<void> {
     const sp = getSpecial(this.field);
@@ -709,13 +736,25 @@ export class BoardView {
 
     // Спавны: бустеры из матчей + награды открытых сейфов (booster или collectible). После волны pop'ов.
     const fromSet = new Set(step.falls.map((f) => f.from));
+    const fallTo = new Map<number, number>();
+    for (const f of step.falls) fallTo.set(f.from, f.to);
     const openedSet = new Set(step.opened.map((o) => o.idx));
+    // Открытые сейфы, ПАДАЮЩИЕ по гравитации (под ними схлопнулось): сейф едет в точку приземления и
+    // раскрывается ТАМ — награда баунсит на месте приземления, а не на старом месте сейфа (см. mover-цикл).
+    const openFalls = new Map<number, { rewardTile: HTMLElement; landIdx: number }>();
     for (const s of step.spawns) {
+      const opened = openedSet.has(s.idx);
+      const willFall = fromSet.has(s.idx);
+      if (opened && willFall) {
+        const landIdx = fallTo.get(s.idx) as number;
+        const rewardTile = isCollectible(s.kind) ? this.makeCollectibleTile(landIdx, s.kind) : this.makeBoosterTile(landIdx, s.kind);
+        openFalls.set(s.idx, { rewardTile, landIdx }); // тайл сейфа НЕ трогаем — упадёт и раскроется в mover-цикле
+        continue;
+      }
       const c = this.cellCenter(s.idx);
       const old = this.tileByIndex.get(s.idx);
-      const opened = openedSet.has(s.idx);
       if (opened && old) {
-        // 🎁 Сейф ОТКРЫВАЕТСЯ: чуть сжимается, затем резко растёт и растворяется + радиальная вспышка.
+        // 🎁 Сейф на месте (не падает) ОТКРЫВАЕТСЯ: чуть сжимается, затем растворяется + радиальная вспышка.
         old.animate(
           [
             { transform: centerTransform(c.x, c.y, 1), opacity: 1, offset: 0 },
@@ -731,8 +770,7 @@ export class BoardView {
       }
       const tile = isCollectible(s.kind) ? this.makeCollectibleTile(s.idx, s.kind) : this.makeBoosterTile(s.idx, s.kind);
       this.tileByIndex.set(s.idx, tile);
-      // Награда сейфа появляется ПОСЛЕ растворения, с баунсом; если она падает по гравитации — её двигает цикл falls.
-      const willFall = fromSet.has(s.idx);
+      // Награда сейфа на месте появляется ПОСЛЕ растворения, с баунсом; бустер из матча, если падает — его двигает mover-цикл.
       const spawnDelay = opened ? gravityDelay + anim.safeOpenMs * 0.7 : gravityDelay;
       const frames = opened
         ? [
@@ -756,11 +794,13 @@ export class BoardView {
     const oldMap = this.tileByIndex;
     const newMap = new Map<number, HTMLElement>();
     for (const [idx, tile] of oldMap) if (!fromSet.has(idx)) newMap.set(idx, tile);
+    // Награды падающих сейфов — финальные обитатели клеток приземления (раскрываются по приезде сейфа).
+    for (const { rewardTile, landIdx } of openFalls.values()) newMap.set(landIdx, rewardTile);
 
     const cols = this.field.cols;
     const startY = -this.cellH * 0.5; // досыпка появляется у верхнего края поля (не «висит» высоко сверху)
     type Mover =
-      | { col: number; destRow: number; kind: 'fall'; tile: HTMLElement; fromX: number; fromY: number; toX: number; toY: number }
+      | { col: number; destRow: number; kind: 'fall'; tile: HTMLElement; fromX: number; fromY: number; toX: number; toY: number; open?: { rewardTile: HTMLElement; landIdx: number } }
       | { col: number; destRow: number; kind: 'refill'; tile: HTMLElement; toX: number; toY: number };
     const byCol = new Map<number, Mover[]>();
     const pushMover = (m: Mover): void => { let a = byCol.get(m.col); if (!a) { a = []; byCol.set(m.col, a); } a.push(m); };
@@ -768,10 +808,11 @@ export class BoardView {
     for (const f of step.falls) {
       const tile = oldMap.get(f.from);
       if (!tile) continue;
-      newMap.set(f.to, tile);
+      const open = openFalls.get(f.from); // падающий сейф → его тайл едет, награда уже сидит в newMap[landIdx]
+      if (!open) newMap.set(f.to, tile);
       const from = this.cellCenter(f.from);
       const to = this.cellCenter(f.to);
-      pushMover({ col: f.to % cols, destRow: Math.floor(f.to / cols), kind: 'fall', tile, fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
+      pushMover({ col: f.to % cols, destRow: Math.floor(f.to / cols), kind: 'fall', tile, fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, open });
     }
     for (const r of step.refills) {
       const to = this.cellCenter(r.idx);
@@ -787,8 +828,14 @@ export class BoardView {
         const delay = gravityDelay + k * anim.reactionMs; // каждый над предыдущим — на reactionMs позже
         if (m.kind === 'fall') {
           const dur = Math.abs(m.toY - m.fromY) / anim.fallSpeed;
-          maxDur = Math.max(maxDur, k * anim.reactionMs + dur);
           this.animTransform(m.tile, centerTransform(m.fromX, m.fromY, 1), centerTransform(m.toX, m.toY, 1), dur, 'linear', delay);
+          if (m.open) {
+            // Сейф доехал до места приземления → раскрывается ТУТ: растворяется, вспышка, награда баунсит здесь же.
+            this.openSafeAt(m.tile, m.open.rewardTile, m.toX, m.toY, m.open.landIdx, delay + dur);
+            maxDur = Math.max(maxDur, k * anim.reactionMs + dur + anim.safeOpenMs * 0.7 + Math.round(anim.spawnMs * 1.35));
+          } else {
+            maxDur = Math.max(maxDur, k * anim.reactionMs + dur);
+          }
         } else {
           const dur = Math.abs(m.toY - startY) / anim.fallSpeed; // та же скорость, что у падения уцелевших
           maxDur = Math.max(maxDur, k * anim.reactionMs + dur);
