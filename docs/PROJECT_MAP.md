@@ -47,7 +47,8 @@ src/
 ├── app/GameApp.ts           Оркестратор (390×844): сборка вью, комбо-аккумулятор+баннер, onMoveEnd→economy.commitMove→полёт в карту
 │
 ├── config/
-│   └── balance.ts           ЕДИНЫЙ источник баланса (board 6×5, tierCount, match.{minLine,rocketLineLen,…}, economy, startLevel, energy, collect{шансы 💎/⚡/🎁}, boosters×4)
+│   ├── balance.ts           ЕДИНЫЙ источник баланса (board 6×5, tierCount, match.{minLine,rocketLineLen,…}, economy, startLevel, energy, collect{шансы 💎/⚡/🎁}, boosters×4)
+│   └── anim.ts              Скорости анимаций перемещения (мс / px·мс) — читаются boardView на лету; DEV-override из дев-панели (вкладка «Анимации»)
 │
 ├── core/                    ЛОГИКА (pure, без DOM)
 │   ├── board.ts             isValidTier, isBooster/isCollectible (тип-гарды), idxToXY/xyToIdx, getSpecial, makeBoard
@@ -80,7 +81,7 @@ src/
     │
     ├── stubModal.ts         Generic «раздел в разработке»
     ├── settingsModal.ts     Настройки (sound/vibration; точка входа на экране пока заглушка)
-    └── devPanel.ts          Dev-панель (DEV-only; tree-shaken в release)
+    └── devPanel.ts          Dev-панель (DEV-only; tree-shaken в release): Ресурсы/Поле/Бустеры/Баланс/Анимации (скорости + копия JSON)
 ```
 
 ## Принципы

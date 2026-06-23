@@ -2,13 +2,15 @@
 // import.meta.env.DEV, поэтому Vite tree-shaking вырезает её из release-сборки.
 //
 // Вкладки: Ресурсы (Баланс/💎/Энергия), Поле (очистка/заливка/перемешать), Бустеры,
-// Баланс-конфиг (быстрые ползунки match + override JSON). Хоткей: ~ (тильда).
+// Баланс-конфиг (быстрые ползунки match + override JSON), Анимации (скорости + копия JSON).
+// Хоткей: ~ (тильда).
 
 import { getData, update, reset } from '../core/storage';
 import { balance } from '../config/balance';
 import { makeBoard } from '../core/board';
 import { hasAnyValidMove } from '../core/match3';
 import { shuffleBoard } from '../core/boosters';
+import { anim, setAnim, resetAnim, type AnimConfig } from '../config/anim';
 import {
   exportBalanceJSON,
   applyBalanceOverrideJSON,
@@ -265,6 +267,64 @@ export function initDevPanel(refresh: () => void): void {
   resetBalBtn.onclick = () => { resetBalanceOverride(); };
   balTab.append(status, ta, applyBtn, resetBalBtn);
   updateStatus();
+
+  // --- Вкладка «Анимации» (скорости перемещения; действуют на лету) ---
+  const animTab = makeTab('anim', 'Анимации');
+  const animHint = document.createElement('div');
+  css(animHint, 'color:#8a8f99;font-size:11px;margin-bottom:8px;line-height:1.4;');
+  animHint.textContent = 'Скорости анимаций перемещения (мс; fallSpeed — px/мс, больше = быстрее падение). Применяются на лету. JSON можно скопировать.';
+  animTab.append(animHint);
+
+  const animInputs = new Map<keyof AnimConfig, HTMLInputElement>();
+  for (const key of Object.keys(anim) as (keyof AnimConfig)[]) {
+    const row = document.createElement('div');
+    css(row, 'display:flex;align-items:center;gap:6px;margin:3px 0;');
+    const lab = document.createElement('label');
+    lab.textContent = key;
+    css(lab, 'flex:1;font-size:11px;');
+    const inp = document.createElement('input');
+    inp.id = `mm-anim-${key}`;
+    inp.type = 'number';
+    inp.step = anim[key] < 10 ? '0.05' : '10';
+    inp.value = String(anim[key]);
+    css(inp, 'width:96px;background:#15171c;color:#fff;border:1px solid #3a414d;border-radius:4px;padding:4px;font:11px monospace;');
+    row.append(lab, inp);
+    animTab.append(row);
+    animInputs.set(key, inp);
+  }
+
+  const animTextarea = document.createElement('textarea');
+  css(animTextarea, 'width:100%;height:150px;background:#15171c;color:#cfe;border:1px solid #3a414d;border-radius:4px;padding:6px;font:11px monospace;white-space:pre;margin-top:8px;');
+  animTextarea.readOnly = true;
+  const animStatus = document.createElement('div');
+  css(animStatus, 'margin:6px 0 2px;color:#9fe870;font-size:11px;min-height:14px;');
+
+  const readAnimInputs = (): Partial<AnimConfig> => {
+    const patch: Record<string, number> = {};
+    for (const [key, inp] of animInputs) { const v = Number(inp.value); if (Number.isFinite(v)) patch[key as string] = v; }
+    return patch as Partial<AnimConfig>;
+  };
+  const refreshAnimJson = (): void => { animTextarea.value = JSON.stringify(anim, null, 2); };
+  const syncAnimInputs = (): void => { for (const [key, inp] of animInputs) inp.value = String(anim[key]); };
+
+  const animApply = btn('Применить', 'mm-anim-apply');
+  animApply.style.width = '100%'; animApply.style.marginTop = '6px';
+  animApply.onclick = () => { setAnim(readAnimInputs()); refreshAnimJson(); animStatus.textContent = 'Применено (со следующей анимации)'; };
+
+  const animCopy = btn('Скопировать JSON', 'mm-anim-copy');
+  css(animCopy, animCopy.style.cssText.replace('#2e7d32', '#1c5a8f')); animCopy.style.width = '100%';
+  animCopy.onclick = async () => {
+    setAnim(readAnimInputs()); refreshAnimJson();
+    try { await navigator.clipboard.writeText(animTextarea.value); animStatus.textContent = 'JSON скопирован в буфер'; }
+    catch { animTextarea.select(); try { document.execCommand('copy'); } catch { /* ignore */ } animStatus.textContent = 'JSON выделен — скопируйте (Ctrl+C)'; }
+  };
+
+  const animResetBtn = btn('Сбросить к дефолтам', 'mm-anim-reset');
+  css(animResetBtn, animResetBtn.style.cssText.replace('#2e7d32', '#555')); animResetBtn.style.width = '100%';
+  animResetBtn.onclick = () => { resetAnim(); syncAnimInputs(); refreshAnimJson(); animStatus.textContent = 'Сброшено к дефолтам'; };
+
+  animTab.append(animApply, animCopy, animResetBtn, animStatus, animTextarea);
+  refreshAnimJson();
 
   tabs.res!.style.display = 'block';
 

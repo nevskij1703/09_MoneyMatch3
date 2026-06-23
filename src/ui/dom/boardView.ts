@@ -30,13 +30,14 @@ import {
   droneTargets, pickDroneFlightTarget,
 } from '../../core/match3';
 import { shuffleBoard } from '../../core/boosters';
+import { anim } from '../../config/anim';
 import { el, centerTransform } from './dom';
 import { makeTierIcon } from './tierArt';
 import { playCollectFx } from './match3Fx';
 
 /**
  * Режим тайминга pop'ов при активации бустера. `span` — за сколько мс волна добегает до дальней
- * клетки (по умолч. RADIAL_SPAN). `delays` — явная задержка pop'а на клетку (перекрывает radial;
+ * клетки (по умолч. anim.boosterWaveMs). `delays` — явная задержка pop'а на клетку (перекрывает radial;
  * дрон собирает «плюс» с delay=0 на взлёте, цель/цепь — к моменту приземления).
  */
 interface ClearTiming { origin: number | null; mode: 'radial' | 'instant'; span?: number; delays?: Map<number, number>; }
@@ -67,13 +68,8 @@ const PANEL_H = 298;              // 5×58 + 4×2
 const GAP = 2;                    // зазор между плашками (одинаковый по верт./гориз.)
 
 const EASE_OUT = 'cubic-bezier(0.22,0.61,0.36,1)';
-const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
-const ANIM = 2;             // глобальный замедлитель анимаций перемещения (всё медленнее в ANIM раз)
-const SWAP_DUR = 150 * ANIM;
-const POP_DUR = 230 * ANIM;        // длительность одного pop'а
-const RADIAL_SPAN = 155 * ANIM;    // за столько мс «добегает» волна сбора до самой дальней клетки
-const REFILL_SPEED = 0.85 / ANIM;  // скорость падения досыпки, px/мс (медленнее → меньше число)
-const REFILL_GAP_CELLS = 1.5; // вертикальный зазор между сыплющимися предметами столбца, в ячейках
+// Тайминги анимаций — в config/anim.ts (мутабельны, крутятся из дев-панели). Падение уцелевших и
+// досыпка идут с ОДНОЙ скоростью anim.fallSpeed (линейно), чтобы падали одинаково.
 
 // Цели полёта собранных объектов (дизайн-координаты 390×844): 💎 — значение в карте, ⚡ — пилюля Energy.
 const DIAMOND_TARGET = { x: 44, y: 237 } as const;
@@ -372,7 +368,7 @@ export class BoardView {
       const d = Math.hypot(cc.x - lc.x, cc.y - lc.y) / this.strideX;
       restD.set(idx, d); if (d > maxRest) maxRest = d;
     }
-    const restStep = maxRest > 0 ? RADIAL_SPAN / maxRest : 0;
+    const restStep = maxRest > 0 ? anim.boosterWaveMs / maxRest : 0;
     const delays = new Map<number, number>();
     for (const idx of step.cleared) delays.set(idx, plus.has(idx) ? 0 : flightDur + (restD.get(idx) ?? 0) * restStep);
     await Promise.all([
@@ -382,12 +378,13 @@ export class BoardView {
     await this.runNaturalCascade();
   }
 
-  /** Длительность полёта дрона ~ дистанции (дольше обычного бустера: 0.46–0.95с). */
+  /** Длительность полёта дрона ~ дистанции: от anim.droneFlightMinMs (близко) до droneFlightMaxMs (далеко). */
   private droneFlightDur(from: number, to: number | null): number {
-    if (to == null) return 460;
+    if (to == null) return anim.droneFlightMinMs;
     const a = this.cellCenter(from), b = this.cellCenter(to);
     const dCells = Math.hypot(b.x - a.x, b.y - a.y) / this.strideX;
-    return Math.max(460, Math.min(950, 380 + dCells * 95)) * ANIM;
+    const t = Math.min(1, dCells / 6);
+    return Math.round(anim.droneFlightMinMs + t * (anim.droneFlightMaxMs - anim.droneFlightMinMs));
   }
 
   /** Активация бустера(ов) после свапа (a и b — уже обменянные клетки; dest = b). */
@@ -479,7 +476,7 @@ export class BoardView {
     const clearSet = new Set<number>([a, b]); // оба свайпнутых бустера расходуются
     const step = applyClear(this.field, clearSet, spawns, balance.tierCount, Math.random);
     await this.animateStep(step, { origin: b, mode: 'radial' });
-    await this.delay(400 * ANIM);
+    await this.delay(anim.spawnMs);
     await this.detonateAllBoosters(b); // авто-взрыв всех заспавненных бустеров
     await this.runNaturalCascade();
   }
@@ -542,7 +539,7 @@ export class BoardView {
   }
 
   /** Визуал: дрон «взлетает» из fromIdx и летит дугой к toIdx за `dur` мс (косметика; клир — отдельно). */
-  private async flyDrone(fromIdx: number, toIdx: number | null, dur = 460 * ANIM): Promise<void> {
+  private async flyDrone(fromIdx: number, toIdx: number | null, dur = anim.droneFlightMinMs): Promise<void> {
     const from = this.cellCenter(fromIdx);
     const to = toIdx != null ? this.cellCenter(toIdx) : from;
     const orig = this.tileByIndex.get(fromIdx);
@@ -583,9 +580,9 @@ export class BoardView {
         { transform: centerTransform(c.x, c.y, 0.65), opacity: 0.9, offset: 0.25 },
         { transform: centerTransform(c.x, c.y, 1.1), opacity: 0, offset: 1 },
       ],
-      { duration: 400 * ANIM, delay, easing: EASE_OUT, fill: 'backwards' },
+      { duration: anim.safeOpenMs, delay, easing: EASE_OUT, fill: 'backwards' },
     );
-    window.setTimeout(() => flash.remove(), delay + 430 * ANIM);
+    window.setTimeout(() => flash.remove(), delay + anim.safeOpenMs + 60);
   }
 
   /** Взорвать ВСЕ бустеры, что сейчас на поле (финал магнит-комбо); origin — точка волны сбора. */
@@ -616,11 +613,11 @@ export class BoardView {
     const tb = this.tileByIndex.get(b);
     const ca = this.cellCenter(a);
     const cb = this.cellCenter(b);
-    if (ta) this.animTransform(ta, centerTransform(ca.x, ca.y, 1), centerTransform(cb.x, cb.y, 1), SWAP_DUR, EASE_OUT);
-    if (tb) this.animTransform(tb, centerTransform(cb.x, cb.y, 1), centerTransform(ca.x, ca.y, 1), SWAP_DUR, EASE_OUT);
+    if (ta) this.animTransform(ta, centerTransform(ca.x, ca.y, 1), centerTransform(cb.x, cb.y, 1), anim.swapMs, EASE_OUT);
+    if (tb) this.animTransform(tb, centerTransform(cb.x, cb.y, 1), centerTransform(ca.x, ca.y, 1), anim.swapMs, EASE_OUT);
     if (ta) this.tileByIndex.set(b, ta); else this.tileByIndex.delete(b);
     if (tb) this.tileByIndex.set(a, tb); else this.tileByIndex.delete(a);
-    await this.delay(SWAP_DUR);
+    await this.delay(anim.swapMs);
   }
 
   /** Каскад натуральных матчей; `moved` — клетки свапа (anchor спавна бустера на 1-м шаге). */
@@ -667,7 +664,7 @@ export class BoardView {
           { transform: centerTransform(c.x, c.y, 1.22), opacity: 1, offset: 0.35 },
           { transform: centerTransform(c.x, c.y, 0.1), opacity: 0 },
         ],
-        { duration: POP_DUR, delay: popDelay(idx, k), easing: EASE_OUT, fill: 'both' },
+        { duration: anim.popMs, delay: popDelay(idx, k), easing: EASE_OUT, fill: 'both' },
       );
       a.onfinish = () => tile.remove();
     });
@@ -690,10 +687,10 @@ export class BoardView {
             { transform: centerTransform(c.x, c.y, 0.8), opacity: 1, offset: 0.35 },
             { transform: centerTransform(c.x, c.y, 1.45), opacity: 0, offset: 1 },
           ],
-          { duration: 340 * ANIM, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
+          { duration: anim.safeOpenMs, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
         );
-        window.setTimeout(() => old.remove(), gravityDelay + 360 * ANIM);
-        this.safeFlash(s.idx, gravityDelay + 120 * ANIM);
+        window.setTimeout(() => old.remove(), gravityDelay + anim.safeOpenMs + 40);
+        this.safeFlash(s.idx, gravityDelay + anim.safeOpenMs * 0.35);
       } else if (old) {
         old.remove();
       }
@@ -701,7 +698,7 @@ export class BoardView {
       this.tileByIndex.set(s.idx, tile);
       // Награда сейфа появляется ПОСЛЕ растворения, с баунсом; если она падает по гравитации — её двигает цикл falls.
       const willFall = fromSet.has(s.idx);
-      const spawnDelay = opened ? gravityDelay + 240 * ANIM : gravityDelay;
+      const spawnDelay = opened ? gravityDelay + anim.safeOpenMs * 0.7 : gravityDelay;
       const frames = opened
         ? [
             { transform: centerTransform(c.x, c.y, 0.1), opacity: 0, offset: 0 },
@@ -714,7 +711,7 @@ export class BoardView {
             { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
             { transform: centerTransform(c.x, c.y, 1) },
           ];
-      if (!willFall) tile.animate(frames, { duration: (opened ? 380 : 280) * ANIM, delay: spawnDelay, easing: EASE_OUT, fill: 'backwards' });
+      if (!willFall) tile.animate(frames, { duration: opened ? Math.round(anim.spawnMs * 1.35) : anim.spawnMs, delay: spawnDelay, easing: EASE_OUT, fill: 'backwards' });
     }
 
     // Гравитация (падения уцелевших) + досыпка сверху — стартуют после волны pop'ов.
@@ -722,16 +719,16 @@ export class BoardView {
     const newMap = new Map<number, HTMLElement>();
     for (const [idx, tile] of oldMap) if (!fromSet.has(idx)) newMap.set(idx, tile);
 
-    let maxDur = POP_DUR;
+    let maxDur = anim.popMs;
     for (const f of step.falls) {
       const tile = oldMap.get(f.from);
       if (!tile) continue;
       newMap.set(f.to, tile);
       const from = this.cellCenter(f.from);
       const to = this.cellCenter(f.to);
-      const dur = (150 + Math.abs(to.y - from.y) * 1.6) * ANIM;
+      const dur = Math.abs(to.y - from.y) / anim.fallSpeed; // та же скорость, что у досыпки (linear)
       maxDur = Math.max(maxDur, dur);
-      this.animTransform(tile, centerTransform(from.x, from.y, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL, gravityDelay);
+      this.animTransform(tile, centerTransform(from.x, from.y, 1), centerTransform(to.x, to.y, 1), dur, 'linear', gravityDelay);
     }
     // Досыпка по СТОЛБЦАМ, СНИЗУ ВВЕРХ и со сдвигом во времени: предметы сыплются по одному (по мере
     // падения предыдущих), нижние ячейки заполняются первыми. До своего падения плитка НЕВИДИМА
@@ -743,14 +740,14 @@ export class BoardView {
       if (!arr) { arr = []; byCol.set(cx, arr); }
       arr.push(r);
     }
-    const refillStagger = (REFILL_GAP_CELLS * this.cellH) / REFILL_SPEED; // сдвиг = зазор 1.5 ячейки / скорость
+    const refillStagger = (anim.refillGapCells * this.cellH) / anim.fallSpeed; // сдвиг = зазор / скорость
     for (const arr of byCol.values()) {
       arr.sort((p, q) => q.idx - p.idx); // больший idx = ниже → падает первым
       arr.forEach((r, i) => {
         const to = this.cellCenter(r.idx);
         const startY = -this.cellH * 0.5; // появляются у верхнего края поля (не «висят» высоко сверху)
         const tile = r.kind ? this.makeCollectibleTile(r.idx, r.kind as CollectibleKind) : this.makeTile(r.idx, r.tier as Tier);
-        const dur = Math.abs(to.y - startY) / REFILL_SPEED; // постоянная скорость → равный шаг между предметами
+        const dur = Math.abs(to.y - startY) / anim.fallSpeed; // та же скорость, что у падения уцелевших
         const stagger = i * refillStagger;
         maxDur = Math.max(maxDur, stagger + dur);
         tile.animate(
@@ -771,11 +768,11 @@ export class BoardView {
 
   /** Задержка pop'а клетки: radial — по дистанции от origin (ближние раньше); instant — 0; иначе — по порядку. */
   private popDelayFn(cleared: number[], timing?: ClearTiming): (idx: number, k: number) => number {
-    if (!timing) return (_i, k) => Math.min(k, 6) * 14 * ANIM;
+    if (!timing) return (_i, k) => Math.min(k, 6) * anim.popMs * 0.06;
     if (timing.delays) { const m = timing.delays; return (idx) => m.get(idx) ?? 0; }
     if (timing.mode === 'instant') return () => 0;
     const origin = timing.origin;
-    if (origin == null) return (_i, k) => Math.min(k, 6) * 14 * ANIM;
+    if (origin == null) return (_i, k) => Math.min(k, 6) * anim.popMs * 0.06;
     const oc = this.cellCenter(origin);
     const dist = new Map<number, number>();
     let maxD = 0;
@@ -785,7 +782,7 @@ export class BoardView {
       dist.set(idx, d);
       if (d > maxD) maxD = d;
     }
-    const stepMs = maxD > 0 ? (timing.span ?? RADIAL_SPAN) / maxD : 0;
+    const stepMs = maxD > 0 ? (timing.span ?? anim.boosterWaveMs) / maxD : 0;
     return (idx) => (dist.get(idx) ?? 0) * stepMs;
   }
 
@@ -802,15 +799,15 @@ export class BoardView {
     }) as HTMLImageElement;
     sprite.src = kind === 'diamond' ? 'assets/hud/icon-diamond.png' : 'assets/hud/icon-energy.svg';
     sprite.alt = ''; sprite.draggable = false;
-    const anim = sprite.animate(
+    const a = sprite.animate(
       [
         { transform: centerTransform(fromX, fromY, 1), opacity: 1, offset: 0 },
         { transform: centerTransform(fromX, fromY - 10, 1.25), opacity: 1, offset: 0.18 },
         { transform: centerTransform(target.x, target.y, 0.5), opacity: 0.25 },
       ],
-      { duration: 540 * ANIM, easing: 'cubic-bezier(0.5,0,0.7,1)', fill: 'forwards' },
+      { duration: anim.collectFlyMs, easing: 'cubic-bezier(0.5,0,0.7,1)', fill: 'forwards' },
     );
-    anim.onfinish = () => { sprite.remove(); this.callbacks.onCollect(kind, fromX, fromY); };
+    a.onfinish = () => { sprite.remove(); this.callbacks.onCollect(kind, fromX, fromY); };
   }
 
   /** Прогнать стартовые матчи (загруженное поле) без денег/анимации + гарантировать ход. */

@@ -85,7 +85,7 @@ Watch Ad), строка Level / Energy / Income. **Energy работает** (�
 
 ```ts
 if (import.meta.env.DEV) {
-  initDevPanel(); // ресурсы, поле, бустеры, override баланса
+  initDevPanel(); // ресурсы, поле, бустеры, override баланса, скорости анимаций (+копия JSON)
 }
 ```
 
