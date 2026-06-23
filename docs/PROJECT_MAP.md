@@ -55,7 +55,7 @@ src/
 │   ├── match3.ts            areOrthoNeighbors, swapCells, findMatches (схлоп + спавн бустеров за сложный матч),
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill (+спавн 💎/⚡/🎁),
 │   │                        resolveCollectibles (сбор/открытие), wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
-│   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials,
+│   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/expandClearWithSpecials/collectBoosterBlasts (цепочка по-бустерно),
 │   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт преим. в обычную плитку),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove

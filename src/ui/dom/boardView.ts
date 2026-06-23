@@ -21,12 +21,12 @@
 // Логика поля — core/match3.ts; здесь — ввод и анимации. Координаты — дизайн-холст 390×844.
 
 import type { FieldState, Tier, SpecialKind, BoosterKind, CollectibleKind } from '../../types';
-import type { CascadeStep, MatchSpawn } from '../../core/match3';
+import type { CascadeStep, MatchSpawn, BoosterBlast } from '../../core/match3';
 import { idxToXY, isValidTier, xyToIdx, getSpecial, isBooster, isCollectible } from '../../core/board';
 import { balance } from '../../config/balance';
 import {
   areOrthoNeighbors, swapCells, hasMatchAny, findMatches, applyClear, resolveStep,
-  boosterTargets, pickNearestTileTier, expandClearWithSpecials, hasAnyValidMove,
+  boosterTargets, pickNearestTileTier, expandClearWithSpecials, collectBoosterBlasts, hasAnyValidMove,
   cellsInSquare, cellsInRows, cellsInCols, cellsInPlus, pickRandomPresentTier,
   droneTargets, pickDroneFlightTarget,
 } from '../../core/match3';
@@ -362,21 +362,39 @@ export class BoardView {
     const kind = getSpecial(this.field)[self];
     if (!isBooster(kind)) return;
     if (kind === 'drone') { await this.activateDrone(self, extra, immune); return; }
+    // Активация self + ЦЕПНАЯ реакция задетых бустеров, с учётом зоны КАЖДОГО: бустер на пути ракеты
+    // детонирует ИЗ СВОЕГО ЦЕНТРА, когда до него дошла волна (а не «всасывается» в общую волну).
     const seed = new Set<number>();
-    for (const c of boosterTargets(this.field, self, magnetTarget)) seed.add(c);
-    if (extra != null) seed.add(extra);
-    const fired = new Set<number>([self]);
-    if (immune) for (const i of immune) fired.add(i);
-    expandClearWithSpecials(this.field, seed, Math.random, fired);
-    if (immune) for (const i of immune) seed.delete(i); // иммунные не сносятся и не чейнятся
-    // Сам бустер + зацепленные по цепочке «заводятся» (пульс), затем действуют. Иммунные (только
-    // что рождённые из матча-свайпа) не активируются — не пульсируют.
-    const pulse = new Set<number>(fired);
-    if (immune) for (const i of immune) pulse.delete(i);
-    await this.pulseBoosters([...pulse]);
-    // Бомба — сразу всё; остальные — постепенно от ближних к дальним (~1с).
-    await this.applyAndAnimate(seed, { origin: self, mode: kind === 'bomb' ? 'instant' : 'radial' });
+    const blasts = collectBoosterBlasts(this.field, self, seed, magnetTarget, immune, Math.random);
+    if (extra != null) seed.add(extra); // собираемый, свайпнутый на бустер, попадает в зону
+    if (immune) for (const i of immune) seed.delete(i); // иммунные не сносятся
+    // Завод: пульсирует ТОЛЬКО активированный бустер; задетые по цепочке детонируют по приходу волны.
+    await this.pulseBoosters([self]);
+    await this.applyAndAnimate(seed, { origin: self, mode: 'radial', delays: this.boosterChainDelays(blasts, extra) });
     await this.runNaturalCascade();
+  }
+
+  /**
+   * Задержки pop'а для цепочки детонаций: каждый бустер бьёт волной ИЗ СВОЕГО ЦЕНТРА; цепной —
+   * начиная с момента, когда волна предыдущего до него дошла (fireTime). Бомба бьёт мгновенно (вся
+   * зона разом), ракета/магнит/дрон — радиально по дистанции. Возвращает Map<idx, задержка мс>.
+   */
+  private boosterChainDelays(blasts: BoosterBlast[], extra?: number): Map<number, number> {
+    const stepMs = anim.boosterWaveMs / Math.max(this.field.cols, this.field.rows); // скорость волны (мс/клетку)
+    const delay = new Map<number, number>();
+    const setMin = (idx: number, d: number): void => { const cur = delay.get(idx); if (cur == null || d < cur) delay.set(idx, d); };
+    for (const blast of blasts) {
+      const fireTime = delay.get(blast.idx) ?? 0; // когда волна дошла до этого бустера (self → 0)
+      const center = this.cellCenter(blast.idx);
+      const instant = blast.kind === 'bomb';
+      for (const c of blast.cells) {
+        if (instant) { setMin(c, fireTime); continue; }
+        const cc = this.cellCenter(c);
+        setMin(c, fireTime + (Math.hypot(cc.x - center.x, cc.y - center.y) / this.strideX) * stepMs);
+      }
+    }
+    if (extra != null) setMin(extra, 0);
+    return delay;
   }
 
   /** Дрон: «плюс» собирается на СТАРТЕ взлёта (delay 0), цель/цепь — к моменту приземления (≈flightDur). */

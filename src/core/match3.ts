@@ -376,6 +376,47 @@ export function expandClearWithSpecials(
   }
 }
 
+/** Одна детонация в цепочке: клетка бустера `idx`, его вид `kind` и все клетки его зоны `cells`. */
+export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; }
+
+/**
+ * Активация бустера `self` + ЦЕПНАЯ реакция задетых бустеров, С УЧЁТОМ зоны КАЖДОГО (в отличие от
+ * expandClearWithSpecials, который сливает всё в одно множество). Возвращает детонации в порядке
+ * срабатывания (BFS: сначала self, затем задетые волной) — чтобы анимировать цепочку как волну,
+ * исходящую из ЦЕНТРА каждого бустера, когда до него добралась предыдущая волна (бустер на пути
+ * ракеты взрывается из своего места, а не «всасывается» в общую волну ракеты). Все снесённые клетки
+ * добавляются в `clearedSet`. `selfTarget` — цель магнита-self; цепным магнитам берётся ближайший тир.
+ * `preFired` — иммунные клетки (не активируются). Поле НЕ мутируется (кроме clearedSet).
+ */
+export function collectBoosterBlasts(
+  field: FieldState,
+  self: number,
+  clearedSet: Set<number>,
+  selfTarget: Tier | null = null,
+  preFired: Iterable<number> = [],
+  rng: () => number = Math.random,
+): BoosterBlast[] {
+  const sp = getSpecial(field);
+  const fired = new Set<number>(preFired);
+  const blasts: BoosterBlast[] = [];
+  const queue: { idx: number; target: Tier | null }[] = [];
+  if (isBooster(sp[self]) && !fired.has(self)) { fired.add(self); queue.push({ idx: self, target: selfTarget }); }
+  for (let head = 0; head < queue.length; head++) {
+    const { idx, target } = queue[head];
+    const cells: number[] = [];
+    for (const t of boosterTargets(field, idx, target, rng)) {
+      clearedSet.add(t);
+      cells.push(t);
+      if (isBooster(sp[t]) && !fired.has(t)) {
+        fired.add(t);
+        queue.push({ idx: t, target: sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null });
+      }
+    }
+    blasts.push({ idx, kind: sp[idx] as SpecialKind, cells });
+  }
+  return blasts;
+}
+
 // ─── Гравитация и досыпка ──────────────────────────────────────────────────────
 
 export interface GravityResult {
