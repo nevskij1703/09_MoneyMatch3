@@ -13,10 +13,13 @@ export interface AnimConfig {
   popMs: number;
   /** Волна сбора бустера до самой дальней клетки, мс (radial span). */
   boosterWaveMs: number;
+  /** Завод бустера перед срабатыванием: пульсирует на месте столько мс, потом действует (у каждого свой таймер). */
+  boosterActivateMs: number;
   /** Скорость падения, px/мс — ОДНА для уцелевших и для досыпки (чтобы они падали одинаково). */
   fallSpeed: number;
-  /** Вертикальный зазор между сыплющимися предметами столбца, в ячейках. */
-  refillGapCells: number;
+  /** Реакция гравитации: пауза перед стартом падения предмета над освободившимся слотом, мс.
+   *  Каскадом снизу вверх — и для уцелевших, и для досыпки (предметы сыплются по одному). */
+  reactionMs: number;
   /** Появление спавна (бустер из матча / награда сейфа), мс. */
   spawnMs: number;
   /** Полёт дрона: минимум (близкая цель), мс. */
@@ -33,13 +36,14 @@ export const DEFAULT_ANIM: AnimConfig = {
   swapMs: 200,
   popMs: 460,
   boosterWaveMs: 310,
-  fallSpeed: 0.5,
-  refillGapCells: 1.5,
+  boosterActivateMs: 300,
+  fallSpeed: 0.6,
+  reactionMs: 100,
   spawnMs: 560,
-  droneFlightMinMs: 920,
-  droneFlightMaxMs: 1900,
-  collectFlyMs: 1000,
-  safeOpenMs: 680,
+  droneFlightMinMs: 500,
+  droneFlightMaxMs: 700,
+  collectFlyMs: 500,
+  safeOpenMs: 460,
 };
 
 /** Активная конфигурация (читается boardView). Мутабельна — правки из дев-панели применяются на лету. */
@@ -47,11 +51,17 @@ export const anim: AnimConfig = { ...DEFAULT_ANIM };
 
 const ANIM_KEY = 'mmatch_anim_override';
 
-// DEV: подмешать сохранённый override поверх дефолтов (в release ветка вырезается).
+// DEV: подмешать сохранённый override поверх дефолтов (в release ветка вырезается). Применяем ТОЛЬКО
+// известные ключи (по DEFAULT_ANIM) — устаревшие/переименованные ключи старого override игнорируются.
 if (import.meta.env.DEV) {
   try {
     const raw = localStorage.getItem(ANIM_KEY);
-    if (raw) Object.assign(anim, JSON.parse(raw));
+    if (raw) {
+      const o = JSON.parse(raw) as Record<string, unknown>;
+      for (const k of Object.keys(DEFAULT_ANIM) as (keyof AnimConfig)[]) {
+        if (typeof o[k] === 'number') anim[k] = o[k] as number;
+      }
+    }
   } catch { /* ignore */ }
 }
 
