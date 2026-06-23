@@ -68,10 +68,11 @@ const GAP = 2;                    // зазор между плашками (о�
 
 const EASE_OUT = 'cubic-bezier(0.22,0.61,0.36,1)';
 const EASE_FALL = 'cubic-bezier(0.45,0,0.7,0.25)';
-const SWAP_DUR = 150;
-const POP_DUR = 230;        // длительность одного pop'а
-const RADIAL_SPAN = 155;    // за столько мс «добегает» волна сбора до самой дальней клетки (быстро)
-const REFILL_SPEED = 0.85;  // скорость падения досыпки, px/мс (постоянная → равноудалённость)
+const ANIM = 2;             // глобальный замедлитель анимаций перемещения (всё медленнее в ANIM раз)
+const SWAP_DUR = 150 * ANIM;
+const POP_DUR = 230 * ANIM;        // длительность одного pop'а
+const RADIAL_SPAN = 155 * ANIM;    // за столько мс «добегает» волна сбора до самой дальней клетки
+const REFILL_SPEED = 0.85 / ANIM;  // скорость падения досыпки, px/мс (медленнее → меньше число)
 const REFILL_GAP_CELLS = 1.5; // вертикальный зазор между сыплющимися предметами столбца, в ячейках
 
 // Цели полёта собранных объектов (дизайн-координаты 390×844): 💎 — значение в карте, ⚡ — пилюля Energy.
@@ -386,7 +387,7 @@ export class BoardView {
     if (to == null) return 460;
     const a = this.cellCenter(from), b = this.cellCenter(to);
     const dCells = Math.hypot(b.x - a.x, b.y - a.y) / this.strideX;
-    return Math.max(460, Math.min(950, 380 + dCells * 95));
+    return Math.max(460, Math.min(950, 380 + dCells * 95)) * ANIM;
   }
 
   /** Активация бустера(ов) после свапа (a и b — уже обменянные клетки; dest = b). */
@@ -478,7 +479,7 @@ export class BoardView {
     const clearSet = new Set<number>([a, b]); // оба свайпнутых бустера расходуются
     const step = applyClear(this.field, clearSet, spawns, balance.tierCount, Math.random);
     await this.animateStep(step, { origin: b, mode: 'radial' });
-    await this.delay(400);
+    await this.delay(400 * ANIM);
     await this.detonateAllBoosters(b); // авто-взрыв всех заспавненных бустеров
     await this.runNaturalCascade();
   }
@@ -541,7 +542,7 @@ export class BoardView {
   }
 
   /** Визуал: дрон «взлетает» из fromIdx и летит дугой к toIdx за `dur` мс (косметика; клир — отдельно). */
-  private async flyDrone(fromIdx: number, toIdx: number | null, dur = 460): Promise<void> {
+  private async flyDrone(fromIdx: number, toIdx: number | null, dur = 460 * ANIM): Promise<void> {
     const from = this.cellCenter(fromIdx);
     const to = toIdx != null ? this.cellCenter(toIdx) : from;
     const orig = this.tileByIndex.get(fromIdx);
@@ -582,9 +583,9 @@ export class BoardView {
         { transform: centerTransform(c.x, c.y, 0.65), opacity: 0.9, offset: 0.25 },
         { transform: centerTransform(c.x, c.y, 1.1), opacity: 0, offset: 1 },
       ],
-      { duration: 400, delay, easing: EASE_OUT, fill: 'backwards' },
+      { duration: 400 * ANIM, delay, easing: EASE_OUT, fill: 'backwards' },
     );
-    window.setTimeout(() => flash.remove(), delay + 430);
+    window.setTimeout(() => flash.remove(), delay + 430 * ANIM);
   }
 
   /** Взорвать ВСЕ бустеры, что сейчас на поле (финал магнит-комбо); origin — точка волны сбора. */
@@ -689,10 +690,10 @@ export class BoardView {
             { transform: centerTransform(c.x, c.y, 0.8), opacity: 1, offset: 0.35 },
             { transform: centerTransform(c.x, c.y, 1.45), opacity: 0, offset: 1 },
           ],
-          { duration: 340, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
+          { duration: 340 * ANIM, delay: gravityDelay, easing: EASE_OUT, fill: 'backwards' },
         );
-        window.setTimeout(() => old.remove(), gravityDelay + 360);
-        this.safeFlash(s.idx, gravityDelay + 120);
+        window.setTimeout(() => old.remove(), gravityDelay + 360 * ANIM);
+        this.safeFlash(s.idx, gravityDelay + 120 * ANIM);
       } else if (old) {
         old.remove();
       }
@@ -700,7 +701,7 @@ export class BoardView {
       this.tileByIndex.set(s.idx, tile);
       // Награда сейфа появляется ПОСЛЕ растворения, с баунсом; если она падает по гравитации — её двигает цикл falls.
       const willFall = fromSet.has(s.idx);
-      const spawnDelay = opened ? gravityDelay + 240 : gravityDelay;
+      const spawnDelay = opened ? gravityDelay + 240 * ANIM : gravityDelay;
       const frames = opened
         ? [
             { transform: centerTransform(c.x, c.y, 0.1), opacity: 0, offset: 0 },
@@ -713,7 +714,7 @@ export class BoardView {
             { transform: centerTransform(c.x, c.y, 1.18), opacity: 1, offset: 0.6 },
             { transform: centerTransform(c.x, c.y, 1) },
           ];
-      if (!willFall) tile.animate(frames, { duration: opened ? 380 : 280, delay: spawnDelay, easing: EASE_OUT, fill: 'backwards' });
+      if (!willFall) tile.animate(frames, { duration: (opened ? 380 : 280) * ANIM, delay: spawnDelay, easing: EASE_OUT, fill: 'backwards' });
     }
 
     // Гравитация (падения уцелевших) + досыпка сверху — стартуют после волны pop'ов.
@@ -728,7 +729,7 @@ export class BoardView {
       newMap.set(f.to, tile);
       const from = this.cellCenter(f.from);
       const to = this.cellCenter(f.to);
-      const dur = 150 + Math.abs(to.y - from.y) * 1.6;
+      const dur = (150 + Math.abs(to.y - from.y) * 1.6) * ANIM;
       maxDur = Math.max(maxDur, dur);
       this.animTransform(tile, centerTransform(from.x, from.y, 1), centerTransform(to.x, to.y, 1), dur, EASE_FALL, gravityDelay);
     }
@@ -770,11 +771,11 @@ export class BoardView {
 
   /** Задержка pop'а клетки: radial — по дистанции от origin (ближние раньше); instant — 0; иначе — по порядку. */
   private popDelayFn(cleared: number[], timing?: ClearTiming): (idx: number, k: number) => number {
-    if (!timing) return (_i, k) => Math.min(k, 6) * 14;
+    if (!timing) return (_i, k) => Math.min(k, 6) * 14 * ANIM;
     if (timing.delays) { const m = timing.delays; return (idx) => m.get(idx) ?? 0; }
     if (timing.mode === 'instant') return () => 0;
     const origin = timing.origin;
-    if (origin == null) return (_i, k) => Math.min(k, 6) * 14;
+    if (origin == null) return (_i, k) => Math.min(k, 6) * 14 * ANIM;
     const oc = this.cellCenter(origin);
     const dist = new Map<number, number>();
     let maxD = 0;
@@ -807,7 +808,7 @@ export class BoardView {
         { transform: centerTransform(fromX, fromY - 10, 1.25), opacity: 1, offset: 0.18 },
         { transform: centerTransform(target.x, target.y, 0.5), opacity: 0.25 },
       ],
-      { duration: 540, easing: 'cubic-bezier(0.5,0,0.7,1)', fill: 'forwards' },
+      { duration: 540 * ANIM, easing: 'cubic-bezier(0.5,0,0.7,1)', fill: 'forwards' },
     );
     anim.onfinish = () => { sprite.remove(); this.callbacks.onCollect(kind, fromX, fromY); };
   }
