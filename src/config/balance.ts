@@ -9,7 +9,7 @@ import type { BoosterId } from '../core/boosters';
 
 export interface TierDef {
   id: number;
-  /** Имя для UI/отладки. value не хранится: tierValue(t) = 2^t. */
+  /** Имя для UI/отладки. value не хранится: tierValue(t) = t (линейно). */
   name: string;
   /** Hex-цвет placeholder-плитки (до арта). Для T1..namedTiers.length. */
   tint: number;
@@ -49,7 +49,7 @@ export interface Balance {
     comboBaseBonus: number;
     /** Прирост денежного бонуса за каждый следующий уровень комбо. По умолч. +1% (×2→+6%, ×3→+7%). */
     comboBonusStep: number;
-    /** Масштаб денег за плитку: collect = tierValue(t) × baseTileValue × investmentMultiplier. */
+    /** Множитель денег за плитку: collect = tierValue(t)=t × baseTileValue × investmentMultiplier (при 1 → T_t = $t). */
     baseTileValue: number;
   };
   economy: {
@@ -116,7 +116,7 @@ export const balance: Balance = {
     bombRadius: 1,        // T/L (пересечение линий) → 💣 «Бомба»: взрыв 3×3 (радиус 1); квадрат 2×2 → 🛸 «Дрон»
     comboBaseBonus: 0.05, // Комбо → +5% к деньгам шага
     comboBonusStep: 0.01, // каждый следующий уровень: +1% (Комбо ×2 → +6%, ×3 → +7%, …)
-    baseTileValue: 5,     // T1-плитка = $10, T4-плитка = $80 (× tierValue 2^t)
+    baseTileValue: 1,     // линейно: T1 = $1, T2 = $2, … T_t = $t (× tierValue(t)=t)
   },
   economy: {
     startBalance: 0,

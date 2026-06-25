@@ -1,24 +1,20 @@
-// Денежные утилы: ВНУТРЕННЯЯ (intrinsic) стоимость тира, форматирование, цвет/имя.
+// Денежные утилы: ценность тира, форматирование, цвет/имя.
 // Pure-функции, без зависимостей от SaveData. Используются UI-модулями и core.
 //
-// ВАЖНО (после iter 22 — динамическое ценообразование):
-//   tierValue(t) = 2^t — это ВНУТРЕННЯЯ ценность тира (для мердж-арифметики:
-//   2^a + 2^a = 2^(a+1)). Реальная ОТОБРАЖАЕМАЯ цена объекта = tierValue(t) ×
-//   eraMultiplier(level) — см. core/economy.ts (scaledTierValue). Поле и
-//   chain-merge оперируют intrinsic (era сокращается в мердже), а резерв/офферы/
-//   спавн — отображаемыми (scaled) деньгами.
+// Ценность тира — ЛИНЕЙНАЯ: tierValue(t) = t (T1=$1, T2=$2, T3=$3, …). Классический match-3 без
+// мерджа, поэтому ни степеней двойки, ни era-множителей нет. Итог сбора плитки считает
+// core/economy.ts: tileCollectValue = tierValue(t) × baseTileValue × investmentMultiplier.
 
 import type { Tier } from '../types';
 import { balance } from '../config/balance';
 
 /**
- * Внутренняя (intrinsic) ценность тира — степень двойки: T1=2, T2=4, …, T10=1024.
- * Тиры теперь ограничены (≤ ~T20), но cap на t ≥ 50 оставлен как защита.
+ * Ценность тира — ЛИНЕЙНАЯ, равна номеру тира: T1=1, T2=2, T3=3, … (каждая собранная плитка тира t
+ * даёт t денег при baseTileValue=1). Без мердж-арифметики (степеней двойки) — это классический match-3.
  */
 export function tierValue(t: Tier): number {
   if (!Number.isFinite(t) || t < 1) return 0;
-  if (t >= 50) return Number.MAX_SAFE_INTEGER;
-  return Math.pow(2, Math.floor(t));
+  return Math.floor(t);
 }
 
 // Суффиксы тысячных порядков: '' K M B T, далее idle-нотация Qa..Vg (до ~1e63).

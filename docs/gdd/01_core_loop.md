@@ -115,7 +115,7 @@
 [src/config/balance.ts](../../src/config/balance.ts) (`match`).
 
 ```
-ценность плитки t = tierValue(t) × baseTileValue × investmentMultiplier      (tierValue = 2^t)
+ценность плитки t = tierValue(t) × baseTileValue × investmentMultiplier      (tierValue = t, baseTileValue = 1 → T_t = $t)
 baseSum (за ход)   = Σ ценность ВСЕХ схлопнутых за ход плиток
 комбо-множитель    = level≤0 ? 1 : 1 + comboBaseBonus + (level−1)·comboBonusStep   (×1 +5%, ×2 +6%, …)
 итог хода           = round( baseSum × комбо-множитель(ФИНАЛЬНЫЙ уровень) )         — НЕ аддитивно
@@ -145,7 +145,7 @@ baseSum (за ход)   = Σ ценность ВСЕХ схлопнутых за
 ## Тиры
 
 - Старт — `tierCount = 4` (арт T1..T4, имена/тинты в `balance.namedTiers`).
-- Внутренняя стоимость `tierValue(t) = 2^t` (T1=2 … T4=16) — крупнее тир ценнее.
+- Ценность `tierValue(t) = t` — линейно: T1=$1, T2=$2, T3=$3, T4=$4 (при baseTileValue=1). Крупнее тир — дороже.
 - Расширение набора тиров с прогрессом — будущее ([08_future.md](08_future.md)).
 
 ## Кор-функции

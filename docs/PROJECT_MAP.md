@@ -22,7 +22,7 @@
 | Кор-логика match-3 (свап, матчи, каскад, гравитация+спавн 💎/⚡/🎁, сбор собираемых, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
 | Тип-гарды `isBooster`/`isCollectible`, конверсии координат, getSpecial | [src/core/board.ts](../src/core/board.ts) |
 | Ценность схлопа (каскад-комбо) → Баланс | [src/core/economy.ts](../src/core/economy.ts) |
-| Внутренняя стоимость тира (2^t) + формат денег | [src/core/money.ts](../src/core/money.ts) |
+| Ценность тира (линейно: t) + формат денег | [src/core/money.ts](../src/core/money.ts) |
 | Поле — свайп-ввод, 6×5, каскад-анимация, гравитация/досыпка | [src/ui/dom/boardView.ts](../src/ui/dom/boardView.ts) |
 | Шапка (аватар-хомяк + Hamster Bank + 🔔/⚙) | [src/ui/dom/headerView.ts](../src/ui/dom/headerView.ts) |
 | Карта Баланс+Алмазы + маскот + декор | [src/ui/dom/balanceCardView.ts](../src/ui/dom/balanceCardView.ts) |
@@ -59,7 +59,7 @@ src/
 │   │                        cellsInPlus/droneTargets/pickDroneFlightTarget (дрон: плюс + полёт преим. в обычную плитку),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
-│   ├── money.ts             tierValue=2^t, formatMoney, formatMoneyFull (все знаки), getTierStyle
+│   ├── money.ts             tierValue=t (линейно: T_t стоит t), formatMoney, formatMoneyFull (все знаки), getTierStyle
 │   ├── energy.ts            regenEnergy/energyToNextMs/hasEnergyForMove/spendEnergyForMove
 │   ├── boosters.ts          BoosterId (bomb/drone/rocket/magnet) + shuffleBoard (только плитки, спецобъекты на местах)
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
