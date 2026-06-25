@@ -196,7 +196,7 @@ export class BoardView {
     });
     tile.dataset.collectible = kind;
     const icon = el('img', { cls: 'board-collectible-art', parent: tile }) as HTMLImageElement;
-    icon.src = kind === 'diamond' ? 'assets/tiers/Diamond.png' : kind === 'lightning' ? 'assets/tiers/Energy.png' : 'assets/tiers/Safe.png';
+    icon.src = encodeURI(`assets/tiers/Property 1=${kind === 'diamond' ? 'Diamond' : kind === 'lightning' ? 'Energy' : 'Safe'}.png`);
     icon.alt = ''; icon.draggable = false;
     this.panel.appendChild(tile);
     return tile;
@@ -896,7 +896,7 @@ export class BoardView {
       style: `width:${this.iconSize}px;height:${this.iconSize}px;`,
       parent: this.stageEl,
     }) as HTMLImageElement;
-    sprite.src = kind === 'diamond' ? 'assets/tiers/Diamond.png' : 'assets/tiers/Energy.png';
+    sprite.src = encodeURI(`assets/tiers/Property 1=${kind === 'diamond' ? 'Diamond' : 'Energy'}.png`);
     sprite.alt = ''; sprite.draggable = false;
     const a = sprite.animate(
       [

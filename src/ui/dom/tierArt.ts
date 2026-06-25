@@ -6,17 +6,17 @@ import type { Tier } from '../../types';
 import { getTierStyle } from '../../core/money';
 import { el, hexColor } from './dom';
 
-/** Максимальный тир, для которого есть готовый арт в public/assets/tiers/ (сейчас T1..T7). */
-export const MAX_TIER_WITH_ART = 7;
+/** Максимальный тир, для которого есть готовый арт в public/assets/tiers/ (сейчас T1..T6). */
+export const MAX_TIER_WITH_ART = 6;
 
 /** Есть ли арт-спрайт для тира. */
 export function hasTierArt(tier: number): boolean {
   return Number.isFinite(tier) && tier >= 1 && tier <= MAX_TIER_WITH_ART;
 }
 
-/** Путь к арт-спрайту тира. base:'./' → относительный путь работает в WebView/APK. */
+/** Путь к арт-спрайту тира (имена из Figma-экспорта «Property 1=T<N>.png»; пробел → %20 через encodeURI). */
 export function tierArtUrl(tier: number): string {
-  return `assets/tiers/T${tier}.png`;
+  return encodeURI(`assets/tiers/Property 1=T${tier}.png`);
 }
 
 /**
