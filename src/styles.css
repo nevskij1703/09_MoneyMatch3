@@ -64,10 +64,9 @@ body {
 
 /* ─────────────────────── Tier-иконка (объект денег) ─────────────────────── */
 /*
-  Арт T1..T28 — PNG из Figma-сета «maney-icon». Каждый тир позиционируется
-  в своём боксе по per-tier инсетам (см. tierArt.ts TIER_INSETS) — 1-в-1 с
-  макетом. Для T>28 — fallback: круг + номер. Мягкая тень — как у плиток
-  на столе в макете.
+  Арт фишек — квадратные PNG 128×128 (public/assets/tiers/), рендерятся НА ВЕСЬ
+  бокс клетки (object-fit:contain, без инсетов). Для тира без арта (см.
+  tierArt.ts MAX_TIER_WITH_ART) — fallback: круг + номер. Мягкая тень — как у плиток.
 */
 .tier {
   position: relative;
@@ -75,6 +74,7 @@ body {
 }
 .tier-art {
   position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -854,53 +854,19 @@ body {
   z-index: 9;
 }
 
-/* Собираемые на поле (💎 алмаз / ⚡ молния / 🎁 сейф): иконка/эмодзи на цветном «чипе». */
+/* Собираемые на поле (💎 алмаз / ⚡ молния / 🎁 сейф): выделенный 128×128 арт НА ВСЮ клетку (как тиры). */
 .board-tile.board-collectible {
   z-index: 3;
 }
-/* Подложка перекрашивает ВСЮ ячейку (inset 0), а не лежит чипом внутри. */
-.board-collectible::before {
-  content: '';
+.board-collectible-art {
   position: absolute;
   inset: 0;
-  border-radius: 9px;
-  background: radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.1));
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5), 0 2px 6px rgba(0, 0, 0, 0.28);
-}
-.board-collectible-diamond::before {
-  background: radial-gradient(circle at 50% 32%, #c8efff, #2f9bff);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6), 0 0 10px rgba(47, 155, 255, 0.7);
-}
-.board-collectible-lightning::before {
-  background: radial-gradient(circle at 50% 32%, #fff0a0, #ffb400);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6), 0 0 10px rgba(255, 180, 0, 0.7);
-}
-.board-collectible-safe::before {
-  background: radial-gradient(circle at 50% 32%, #d9b3ff, #6a1fb0);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 10px rgba(123, 47, 207, 0.7);
-}
-.board-collectible-icon {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 70%;
-  height: 70%;
-  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   pointer-events: none;
   z-index: 2;
-}
-.board-collectible-emoji {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 30px;
-  line-height: 1;
-  pointer-events: none;
-  z-index: 2;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 /* Радиальная вспышка под открывающимся 🎁 сейфом (фиолетовая). */
 .board-safe-flash {

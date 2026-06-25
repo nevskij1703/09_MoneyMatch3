@@ -29,7 +29,7 @@
 | Офферы SALE / Watch Ad | [src/ui/dom/offersView.ts](../src/ui/dom/offersView.ts) |
 | Строка Level / Energy / Income | [src/ui/dom/infoRowView.ts](../src/ui/dom/infoRowView.ts) |
 | Низ: 4 кнопки-бустера + меню 5 вкладок | [src/ui/dom/actionBarView.ts](../src/ui/dom/actionBarView.ts) |
-| Спрайт тира T1..T28 / fallback-круг | [src/ui/dom/tierArt.ts](../src/ui/dom/tierArt.ts) |
+| Спрайт тира (PNG 128×128 на всю клетку) / fallback-круг | [src/ui/dom/tierArt.ts](../src/ui/dom/tierArt.ts) |
 | Оркестратор экрана (FIT 390×844, сбор→карта, заглушки) | [src/app/GameApp.ts](../src/app/GameApp.ts) |
 | Сохранение / миграции / mergeDefaults | [src/core/storage.ts](../src/core/storage.ts), [src/core/migrations.ts](../src/core/migrations.ts) |
 | Бустеры (id bomb/drone/rocket/magnet + shuffleBoard) | [src/core/boosters.ts](../src/core/boosters.ts) |
@@ -70,7 +70,7 @@ src/
 └── ui/
     ├── dom/                 DOM-вью (координаты 390×844)
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
-    │   ├── tierArt.ts       makeTierIcon (PNG T1..T28 + fallback)
+    │   ├── tierArt.ts       makeTierIcon (квадратный PNG 128×128 НА ВСЮ клетку, без инсетов; + fallback-круг для T>MAX_TIER_WITH_ART)
     │   ├── headerView.ts    Шапка: аватар-хомяк, «Hamster Bank» + тэглайн, 🔔(+бэйдж), ⚙
     │   ├── balanceCardView.ts  Карта Баланс+Алмазы (все знаки, авто-уменьшение) + маскот + декор; refresh/bumpBalance; MONEY_TARGET
     │   ├── offersView.ts    Офферы SALE / Watch Ad (тап → заглушка)

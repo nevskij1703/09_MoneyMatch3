@@ -103,7 +103,7 @@ export class BoardView {
     this.cellH = (PANEL_H - (field.rows - 1) * GAP) / field.rows; // 58
     this.strideX = this.cellW + GAP; // 60
     this.strideY = this.cellH + GAP; // 60
-    this.iconSize = Math.min(this.cellW, this.cellH) - 2;
+    this.iconSize = Math.min(this.cellW, this.cellH); // арт 128×128 ложится РОВНО в квадрат ячейки
     this.stageEl = stage;
 
     el('div', { cls: 'hb-board-base', style: `left:${BASE_LEFT}px;top:${BASE_TOP}px;width:${BASE_W}px;height:${BASE_H}px;`, parent: stage });
@@ -187,7 +187,7 @@ export class BoardView {
     return tile;
   }
 
-  /** Создать собираемый объект на поле (💎 алмаз / ⚡ молния — иконки HUD; 🎁 сейф — эмодзи). */
+  /** Создать собираемый объект на поле (💎/⚡/🎁 — выделенный 128×128 арт из assets/tiers/, на всю клетку). */
   private makeCollectibleTile(idx: number, kind: CollectibleKind): HTMLElement {
     const c = this.cellCenter(idx);
     const tile = el('div', {
@@ -195,13 +195,9 @@ export class BoardView {
       style: `left:0;top:0;width:${this.cellW}px;height:${this.cellH}px;transform:${centerTransform(c.x, c.y, 1)};`,
     });
     tile.dataset.collectible = kind;
-    if (kind === 'safe') {
-      el('div', { cls: 'board-collectible-emoji', text: '🎁', parent: tile });
-    } else {
-      const icon = el('img', { cls: 'board-collectible-icon', parent: tile }) as HTMLImageElement;
-      icon.src = kind === 'diamond' ? 'assets/hud/icon-diamond.png' : 'assets/hud/icon-energy.svg';
-      icon.alt = ''; icon.draggable = false;
-    }
+    const icon = el('img', { cls: 'board-collectible-art', parent: tile }) as HTMLImageElement;
+    icon.src = kind === 'diamond' ? 'assets/tiers/Diamond.png' : kind === 'lightning' ? 'assets/tiers/Energy.png' : 'assets/tiers/Safe.png';
+    icon.alt = ''; icon.draggable = false;
     this.panel.appendChild(tile);
     return tile;
   }
@@ -900,7 +896,7 @@ export class BoardView {
       style: `width:${this.iconSize}px;height:${this.iconSize}px;`,
       parent: this.stageEl,
     }) as HTMLImageElement;
-    sprite.src = kind === 'diamond' ? 'assets/hud/icon-diamond.png' : 'assets/hud/icon-energy.svg';
+    sprite.src = kind === 'diamond' ? 'assets/tiers/Diamond.png' : 'assets/tiers/Energy.png';
     sprite.alt = ''; sprite.draggable = false;
     const a = sprite.animate(
       [
