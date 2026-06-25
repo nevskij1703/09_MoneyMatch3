@@ -13,10 +13,11 @@
 //  • ЗАВОД: перед действием бустер пульсирует на месте ~boosterActivateMs (у каждого свой таймер), затем срабатывает;
 //  • сбор бустера ПОСТЕПЕННЫЙ (от ближних к дальним, ~1с); бомба — сразу всё; дрон — дольше летит.
 //
-// СОБИРАЕМЫЕ на поле (💎 алмаз / ⚡ молния / 🎁 сейф): СВАПАЮТСЯ как обычные фишки (обмен прилипает,
-// если образовался матч; свайп на бустер активирует его и собирает их). Собираются, если рядом схлоп
-// ИЛИ по ним прошёл бустер. Алмаз → +1💎, молния → +energy (без множителей, улетают в баланс).
-// Сейф → открывается в награду (бустер/алмаз/молния), которая остаётся лежать до своего сбора.
+// СОБИРАЕМЫЕ на поле: 💎 алмаз / ⚡ молния СВАПАЮТСЯ как фишки (обмен прилипает по матчу; свайп на
+// бустер активирует и собирает их); ловятся, если рядом схлоп матча ИЛИ по ним ПРЯМО попал бустер.
+// Алмаз → +1💎, молния → +energy (без множителей, улетают в баланс). 🎁 СЕЙФ — НЕПОДВИЖЕН (не свапается
+// ни с чем) и открывается ТОЛЬКО прямым попаданием бустера (ракета/бомба/дрон) → награда (бустер/💎/⚡);
+// дрон в ПРИОРИТЕТЕ целится в сейфы. Награда остаётся лежать до своего сбора.
 //
 // Логика поля — core/match3.ts; здесь — ввод и анимации. Координаты — дизайн-холст 390×844.
 
@@ -279,6 +280,13 @@ export class BoardView {
     this.busy = true;
 
     const sp = getSpecial(this.field);
+    // 🎁 Сейф НЕПОДВИЖЕН — его нельзя свайпать ни с чем (плитка/собираемый/бустер). Открывается только
+    // прямым попаданием бустера. Свайп → отказ (дёрнуть и вернуть, без обмена и без траты энергии).
+    if (sp[a] === 'safe' || sp[b] === 'safe') {
+      await this.rejectSwap(a, b);
+      this.busy = false;
+      return;
+    }
     if (isBooster(sp[a]) || isBooster(sp[b])) {
       // Хотя бы один — БУСТЕР: перемещаем (обмен a↔b) и активируем на новых местах.
       // Собираемый, свайпнутый на бустер, попадёт под сбор (см. resolveBoosterActivation).
@@ -686,6 +694,27 @@ export class BoardView {
     if (tb) this.animTransform(tb, centerTransform(cb.x, cb.y, 1), centerTransform(ca.x, ca.y, 1), anim.swapMs, EASE_OUT);
     if (ta) this.tileByIndex.set(b, ta); else this.tileByIndex.delete(b);
     if (tb) this.tileByIndex.set(a, tb); else this.tileByIndex.delete(a);
+    await this.delay(anim.swapMs);
+  }
+
+  /** Свайп отклонён (🎁 сейф неподвижен): обе клетки «дёргаются» навстречу и возвращаются. Без обмена/энергии. */
+  private async rejectSwap(a: number, b: number): Promise<void> {
+    const ca = this.cellCenter(a), cb = this.cellCenter(b);
+    const nudge = (idx: number, from: { x: number; y: number }, to: { x: number; y: number }): void => {
+      const tile = this.tileByIndex.get(idx);
+      if (!tile) return;
+      const mx = from.x + (to.x - from.x) * 0.28, my = from.y + (to.y - from.y) * 0.28;
+      tile.animate(
+        [
+          { transform: centerTransform(from.x, from.y, 1) },
+          { transform: centerTransform(mx, my, 1), offset: 0.5 },
+          { transform: centerTransform(from.x, from.y, 1) },
+        ],
+        { duration: anim.swapMs, easing: EASE_OUT },
+      );
+    };
+    nudge(a, ca, cb);
+    nudge(b, cb, ca);
     await this.delay(anim.swapMs);
   }
 

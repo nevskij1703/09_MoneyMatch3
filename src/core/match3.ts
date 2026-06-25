@@ -256,9 +256,10 @@ export function cellsInPlus(field: FieldState, idx: number): Set<number> {
 }
 
 /**
- * Куда «летит» дрон: ПРЕИМУЩЕСТВЕННО в обычную клетку-деньги (случайную), НЕ в бустеры и НЕ в
- * собираемые. Бустеры/собираемые — лишь ФОЛБЭК (по приоритету 🧲→💣→🚀→🛸→💎→⚡→🎁), когда обычных
- * плиток на поле не осталось. `exclude` — клетки, которые нельзя выбирать. null — поле пусто.
+ * Куда «летит» дрон. ПРИОРИТЕТ №1 — 🎁 СЕЙФ (дрон охотится на сейфы, ведь открыть их можно только
+ * прямым попаданием бустера). Если сейфов нет — обычная клетка-деньги (случайная), НЕ бустеры/прочие
+ * собираемые. Бустеры/💎/⚡ — лишь ФОЛБЭК (по приоритету 🧲→💣→🚀→🛸→💎→⚡), когда нет ни сейфов, ни
+ * обычных плиток. `exclude` — клетки, которые нельзя выбирать. null — поле пусто.
  */
 export function pickDroneFlightTarget(
   field: FieldState,
@@ -269,15 +270,19 @@ export function pickDroneFlightTarget(
   const sp = getSpecial(field);
   const skip = new Set<number>(exclude ?? []);
   skip.add(selfIdx);
-  // Основная цель — обычные плитки-деньги (не спецобъекты).
+  // ПРИОРИТЕТ №1 — сейфы (их вскрывает только бустер; дрон целенаправленно летит в них).
+  const safes: number[] = [];
+  for (let i = 0; i < sp.length; i++) if (!skip.has(i) && sp[i] === 'safe') safes.push(i);
+  if (safes.length) return safes[Math.floor(rng() * safes.length)];
+  // Иначе — обычная плитка-деньги (не спецобъект).
   const money: number[] = [];
   for (let i = 0; i < field.cells.length; i++) {
     if (!skip.has(i) && !sp[i] && isValidTier(field.cells[i])) money.push(i);
   }
   if (money.length) return money[Math.floor(rng() * money.length)];
-  // Фолбэк (обычных плиток нет): бустеры/собираемые по приоритету.
+  // Фолбэк (ни сейфов, ни обычных плиток): прочие бустеры/собираемые по приоритету.
   const priority: SpecialKind[][] = [
-    ['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone'], ['diamond'], ['lightning'], ['safe'],
+    ['magnet'], ['bomb'], ['rocket-h', 'rocket-v'], ['drone'], ['diamond'], ['lightning'],
   ];
   for (const kinds of priority) {
     const cand: number[] = [];
@@ -526,11 +531,12 @@ function rollSafeReward(rng: () => number): SpecialKind {
 }
 
 /**
- * Сработавшие собираемые объекты. Триггер СТРОГО один из двух:
- *   • ПРЯМОЕ попадание бустером — клетка собираемого ∈ clearedSet;
- *   • СОСЕДСТВО со схлопом НАТУРАЛЬНОГО матча — только если `byMatch` (рядом ортогонально матчнулась
- *     плитка). При активации бустера `byMatch=false`: пролетевшая мимо ракета / взрыв рядом, НЕ
- *     задевший саму клетку, НЕ собирают её.
+ * Сработавшие собираемые объекты.
+ *   • 💎 алмаз / ⚡ молния — триггер по ПРЯМОМУ попаданию бустером (∈ clearedSet) ИЛИ по СОСЕДСТВУ
+ *     со схлопом НАТУРАЛЬНОГО матча (только если `byMatch`). Пролетевшая мимо ракета / взрыв рядом,
+ *     НЕ задевший клетку, их НЕ собирают.
+ *   • 🎁 СЕЙФ — ТОЛЬКО прямое попадание бустером (∈ clearedSet): под ракету/взрыв бомбы/дрон. Соседство
+ *     с матчем его НЕ открывает (сейф к тому же неподвижен — не свайпается, в матч не попадает).
  * diamond/lightning → собираются (idx в clearedSet, считается в diamonds/energy); safe → ОТКРЫВАЕТСЯ
  * (награда в spawns, в clearedSet не попадает). Mutates clearedSet и spawns.
  */
@@ -555,7 +561,7 @@ function resolveCollectibles(
     const k = sp[i];
     if (!isCollectible(k) || spawnIdx.has(i)) continue;
     let triggered = clearedSet.has(i); // прямое попадание (бустер по самой клетке)
-    if (!triggered && byMatch) {        // соседство — только со схлопнутыми МАТЧЕМ плитками
+    if (!triggered && byMatch && k !== 'safe') { // соседство — для 💎/⚡; 🎁 сейф ТОЛЬКО прямым попаданием
       const { x, y } = idxToXY(i, cols);
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         const nx = x + dx, ny = y + dy;
@@ -632,9 +638,10 @@ export function resolveStep(
 
 // ─── Валидность хода / дедлок ───────────────────────────────────────────────────
 
-/** Даст ли свап a↔b матч? Бустер «применяется» всегда; собираемый/плитка — если после обмена есть матч. Поле не меняется (откат). */
+/** Даст ли свап a↔b матч? 🎁 Сейф НЕПОДВИЖЕН (не ход); бустер «применяется» всегда; собираемый/плитка — если после обмена есть матч. Поле не меняется (откат). */
 export function wouldSwapMatch(field: FieldState, a: number, b: number): boolean {
   const sp = getSpecial(field);
+  if (sp[a] === 'safe' || sp[b] === 'safe') return false; // сейф нельзя свайпать — это не ход
   if (isBooster(sp[a]) || isBooster(sp[b])) return true;
   swapCells(field, a, b);
   const has = hasMatchAny(field);
