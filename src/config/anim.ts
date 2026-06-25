@@ -38,7 +38,7 @@ export const DEFAULT_ANIM: AnimConfig = {
   boosterWaveMs: 310,
   boosterActivateMs: 300,
   fallSpeed: 0.6,
-  reactionMs: 100,
+  reactionMs: 150,
   spawnMs: 560,
   droneFlightMinMs: 500,
   droneFlightMaxMs: 700,
