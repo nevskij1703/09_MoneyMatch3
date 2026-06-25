@@ -9,6 +9,7 @@ import { getData } from '../../core/storage';
 import { balance } from '../../config/balance';
 import type { BoosterId } from '../../core/boosters';
 import { el } from './dom';
+import { boosterIconUrl } from './boosterArt';
 
 export type TabId = 'build' | 'tasks' | 'collections' | 'shop';
 
@@ -61,7 +62,7 @@ export class ActionBarView {
       const gloss = el('img', { cls: 'hb-booster-gloss', parent: btn }) as HTMLImageElement;
       gloss.src = 'assets/boosters/ellipse.svg'; gloss.alt = ''; gloss.draggable = false;
       const icon = el('img', { cls: 'hb-booster-icon', parent: btn }) as HTMLImageElement;
-      icon.src = `assets/boosters/${def.id}.png`; icon.alt = def.name; icon.draggable = false;
+      icon.src = boosterIconUrl(def.id); icon.alt = def.name; icon.draggable = false;
       const count = el('div', { cls: 'hb-booster-count', text: '0', parent: btn });
       btn.addEventListener('pointerup', () => this.callbacks.onBooster(def.id));
       this.boosters.push({ id: def.id, count });

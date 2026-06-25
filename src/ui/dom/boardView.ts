@@ -34,6 +34,7 @@ import { shuffleBoard } from '../../core/boosters';
 import { anim } from '../../config/anim';
 import { el, centerTransform } from './dom';
 import { makeTierIcon } from './tierArt';
+import { boosterIconUrl } from './boosterArt';
 import { playCollectFx } from './match3Fx';
 
 /**
@@ -169,20 +170,16 @@ export class BoardView {
     return tile;
   }
 
-  /** Создать бустер-объект на поле (только PNG-иконка; без чипа/подсветки; ⇆/⇅ для ракеты). */
+  /** Создать бустер-объект на поле (только PNG-иконка; ориентация ракеты — отдельным артом h/v). */
   private makeBoosterTile(idx: number, kind: BoosterKind): HTMLElement {
     const c = this.cellCenter(idx);
-    const base = kind === 'bomb' ? 'bomb' : kind === 'magnet' ? 'magnet' : kind === 'drone' ? 'drone' : 'rocket';
     const tile = el('div', {
-      cls: `board-tile board-booster board-booster-${base}`,
+      cls: 'board-tile board-booster',
       style: `left:0;top:0;width:${this.cellW}px;height:${this.cellH}px;transform:${centerTransform(c.x, c.y, 1)};`,
     });
     tile.dataset.booster = kind;
     const icon = el('img', { cls: 'board-booster-icon', parent: tile }) as HTMLImageElement;
-    icon.src = `assets/boosters/${base}.png`; icon.alt = ''; icon.draggable = false;
-    if (kind === 'rocket-h' || kind === 'rocket-v') {
-      el('div', { cls: 'board-booster-dir', text: kind === 'rocket-h' ? '⇆' : '⇅', parent: tile });
-    }
+    icon.src = boosterIconUrl(kind); icon.alt = ''; icon.draggable = false;
     this.panel.appendChild(tile);
     return tile;
   }
@@ -604,7 +601,7 @@ export class BoardView {
       style: `width:${this.iconSize}px;height:${this.iconSize}px;`,
       parent: this.panel,
     }) as HTMLImageElement;
-    sprite.src = 'assets/boosters/drone.png'; sprite.alt = ''; sprite.draggable = false;
+    sprite.src = boosterIconUrl('drone'); sprite.alt = ''; sprite.draggable = false;
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
     const dip = Math.min(46, 18 + dist * 0.2);
     const midX = (from.x + to.x) / 2;

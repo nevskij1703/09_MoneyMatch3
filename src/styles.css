@@ -831,18 +831,6 @@ body {
   pointer-events: none;
   z-index: 2;
 }
-/* Стрелка ориентации ракеты (⇆ ряд / ⇅ столбец). */
-.board-booster-dir {
-  position: absolute;
-  right: 5%;
-  bottom: 2%;
-  font: 800 13px 'Roboto Flex', sans-serif;
-  color: #d4efff;
-  line-height: 1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
-  pointer-events: none;
-  z-index: 3;
-}
 /* Летящий дрон (🛸 при активации: «взлёт» из своей клетки к цели). Чисто косметика. */
 .board-drone-fly {
   position: absolute;
