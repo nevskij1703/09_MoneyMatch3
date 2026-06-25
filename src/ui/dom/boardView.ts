@@ -281,9 +281,9 @@ export class BoardView {
 
     const sp = getSpecial(this.field);
     // 🎁 Сейф НЕПОДВИЖЕН — его нельзя свайпать ни с чем (плитка/собираемый/бустер). Открывается только
-    // прямым попаданием бустера. Свайп → отказ (дёрнуть и вернуть, без обмена и без траты энергии).
+    // прямым попаданием бустера. Свайп с участием сейфа просто игнорируется: ни обмена, ни энергии, ни
+    // анимации — сейф не дёргается (как стена-препятствие). Перетаскиваемая плитка тоже остаётся на месте.
     if (sp[a] === 'safe' || sp[b] === 'safe') {
-      await this.rejectSwap(a, b);
       this.busy = false;
       return;
     }
@@ -694,27 +694,6 @@ export class BoardView {
     if (tb) this.animTransform(tb, centerTransform(cb.x, cb.y, 1), centerTransform(ca.x, ca.y, 1), anim.swapMs, EASE_OUT);
     if (ta) this.tileByIndex.set(b, ta); else this.tileByIndex.delete(b);
     if (tb) this.tileByIndex.set(a, tb); else this.tileByIndex.delete(a);
-    await this.delay(anim.swapMs);
-  }
-
-  /** Свайп отклонён (🎁 сейф неподвижен): обе клетки «дёргаются» навстречу и возвращаются. Без обмена/энергии. */
-  private async rejectSwap(a: number, b: number): Promise<void> {
-    const ca = this.cellCenter(a), cb = this.cellCenter(b);
-    const nudge = (idx: number, from: { x: number; y: number }, to: { x: number; y: number }): void => {
-      const tile = this.tileByIndex.get(idx);
-      if (!tile) return;
-      const mx = from.x + (to.x - from.x) * 0.28, my = from.y + (to.y - from.y) * 0.28;
-      tile.animate(
-        [
-          { transform: centerTransform(from.x, from.y, 1) },
-          { transform: centerTransform(mx, my, 1), offset: 0.5 },
-          { transform: centerTransform(from.x, from.y, 1) },
-        ],
-        { duration: anim.swapMs, easing: EASE_OUT },
-      );
-    };
-    nudge(a, ca, cb);
-    nudge(b, cb, ca);
     await this.delay(anim.swapMs);
   }
 
