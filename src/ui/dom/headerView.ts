@@ -33,9 +33,9 @@ export class HeaderView {
     el('div', { cls: 'hb-badge', text: '3', parent: bell });
     bell.addEventListener('pointerup', () => callbacks.onBell());
 
-    // ⚙ (x=348, 30×30).
-    const settings = el('div', { cls: 'hb-settingsbtn', style: 'left:348px;top:10px;width:30px;height:30px;cursor:pointer;', parent: header });
-    const si = el('img', { parent: settings }) as HTMLImageElement;
+    // ⚙ (x=348, 30×30) — тот же стиль кнопки, что и 🔔 (hb-iconbtn: синяя рамка + иконка 62%).
+    const settings = el('div', { cls: 'hb-iconbtn', style: 'left:348px;top:10px;width:30px;height:30px;', parent: header });
+    const si = el('img', { cls: 'hb-iconbtn-img', parent: settings }) as HTMLImageElement;
     si.src = 'assets/hud/icon-settings.svg';
     si.alt = '';
     si.draggable = false;
