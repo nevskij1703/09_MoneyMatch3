@@ -71,7 +71,7 @@ src/
     ├── dom/                 DOM-вью (координаты 390×844)
     │   ├── dom.ts           el(), hexColor(), css(), centerTransform()
     │   ├── tierArt.ts       makeTierIcon (квадратный PNG 128×128 НА ВСЮ клетку, без инсетов; + fallback-круг для T>MAX_TIER_WITH_ART)
-    │   ├── boosterArt.ts    boosterIconUrl(kind) → PNG бустера (drone/magnet «_v2», ракета — отдельный арт h/v); общий для поля и кнопок
+    │   ├── boosterArt.ts    boosterIconUrl(kind) → PNG бустера (Bomb/Dron/Magnet + ракета отдельным артом Rocket_horizontal/vertical); общий для поля и кнопок; регистр имён критичен (case-sensitive APK)
     │   ├── headerView.ts    Шапка: аватар-хомяк, «Hamster Bank» + тэглайн, 🔔(+бэйдж), ⚙
     │   ├── balanceCardView.ts  Карта Баланс+Алмазы (все знаки, авто-уменьшение) + маскот + декор; refresh/bumpBalance; MONEY_TARGET
     │   ├── offersView.ts    Офферы SALE / Watch Ad (тап → заглушка)
