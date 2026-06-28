@@ -385,6 +385,7 @@ export function collectBoosterBlasts(
   const sp = getSpecial(field);
   const cleared = new Set<number>(seedCells);
   const fired = new Set<number>(noDetonate);
+  const claimed = new Set<number>(); // клетки-цели, уже занятые дронами: другой дрон ту же цель не выбирает
   const blasts: BoosterBlast[] = [];
   const queue: { idx: number; target: Tier | null; primary: boolean }[] = [];
   const enqueue = (idx: number, target: Tier | null, primary: boolean): void => {
@@ -396,7 +397,13 @@ export function collectBoosterBlasts(
     const { idx, target, primary } = queue[head];
     // Дрон: зона через droneTargets (цель полёта ОДНИМ роллом, запоминаем flightTarget для анимации ВЗЛЁТА).
     // ПРЯМОЙ дрон собирает «плюс» на взлёте; ЦЕПНОЙ (primary=false) — просто взлетает (без сноса 4 клеток).
-    const dt = sp[idx] === 'drone' ? droneTargets(field, idx, rng, fired, primary) : null;
+    // Исключаем уже занятые цели (`claimed`), чтобы два дрона не летели в одну и ту же клетку.
+    let dt: { cells: Set<number>; flightTarget: number | null } | null = null;
+    if (sp[idx] === 'drone') {
+      const exclude = new Set<number>(fired); for (const c of claimed) exclude.add(c);
+      dt = droneTargets(field, idx, rng, exclude, primary);
+      if (dt.flightTarget != null) claimed.add(dt.flightTarget);
+    }
     const zone = dt ? dt.cells : boosterTargets(field, idx, target, rng);
     const cells: number[] = [];
     for (const t of zone) {
