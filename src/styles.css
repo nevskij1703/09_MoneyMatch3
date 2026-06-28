@@ -850,6 +850,26 @@ body {
   pointer-events: none;
   z-index: 9;
 }
+/* 💣 Вспышка-взрыв бомбы (оранжево-белый шар, гаснет). */
+.board-bomb-boom {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 245, 0.95) 0%, rgba(255, 196, 84, 0.85) 30%, rgba(255, 110, 40, 0.5) 55%, rgba(255, 90, 30, 0) 72%);
+  pointer-events: none;
+  z-index: 8;
+}
+/* 🚀 Летящий спрайт ракеты (два в обе стороны при активации). Чисто косметика. */
+.board-rocket-fly {
+  position: absolute;
+  left: 0;
+  top: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+  z-index: 9;
+}
 
 /* Собираемые на поле (💎 алмаз / ⚡ молния / 🎁 сейф): выделенный 128×128 арт НА ВСЮ клетку (как тиры). */
 .board-tile.board-collectible {
