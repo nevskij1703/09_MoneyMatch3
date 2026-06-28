@@ -766,45 +766,25 @@ export class BoardView {
     await this.runNaturalCascade();
   }
 
-  /** 🛸+🛸 — взлетают 3 дрона: 2 ИЗ origin (к двум целям) + 1 бонусный со случайной клетки-деньги. */
+  /** 🛸+🛸 — взлетают 3 дрона ВСЕ ИЗ клетки принимающего (origin), каждый к своей цели. */
   private async droneDroneCombo(origin: number): Promise<void> {
     const rng = Math.random;
-    const bonus = this.randomMoneyCell([origin]);
-    const ex: number[] = [origin]; if (bonus != null) ex.push(bonus);
-    const t1 = pickDroneFlightTarget(this.field, origin, rng, ex); if (t1 != null) ex.push(t1);
-    const t2 = pickDroneFlightTarget(this.field, origin, rng, ex); if (t2 != null) ex.push(t2);
-    const bt = bonus != null ? pickDroneFlightTarget(this.field, bonus, rng, ex) : null;
-    const cleared = new Set<number>([origin, ...cellsInPlus(this.field, origin)]);
-    if (t1 != null) cleared.add(t1);
-    if (t2 != null) cleared.add(t2);
-    if (bonus != null) { for (const c of cellsInPlus(this.field, bonus)) cleared.add(c); if (bt != null) cleared.add(bt); }
-    const dur1 = this.droneFlightDur(origin, t1), dur2 = this.droneFlightDur(origin, t2), durB = bonus != null ? this.droneFlightDur(bonus, bt) : 0;
+    const ex: number[] = [origin];
+    const targets: number[] = [];
+    for (let n = 0; n < 3; n++) { const t = pickDroneFlightTarget(this.field, origin, rng, ex); if (t == null) break; targets.push(t); ex.push(t); }
+    const cleared = new Set<number>([origin, ...cellsInPlus(this.field, origin), ...targets]);
+    const durs = targets.map((t) => this.droneFlightDur(origin, t));
     const delays = new Map<number, number>();
-    for (const c of cleared) delays.set(c, 0); // «плюсы» — на взлёте
-    if (t1 != null) delays.set(t1, dur1);
-    if (t2 != null) delays.set(t2, dur2);
-    if (bt != null) delays.set(bt, durB);
-    const oTile = this.tileByIndex.get(origin), bTile = bonus != null ? this.tileByIndex.get(bonus) : undefined;
+    for (const c of cleared) delays.set(c, 0);          // «плюс» вокруг origin — на взлёте
+    targets.forEach((t, i) => delays.set(t, durs[i]));  // цели — в приземлении своего дрона
+    const oTile = this.tileByIndex.get(origin); // дрон-тайл принимающего прячет первый полёт
     const step = applyClear(this.field, cleared, [], balance.tierCount, rng);
     const { settleMs } = this.animateStep(step, { origin, mode: 'radial', delays });
-    await Promise.all([
-      this.flyChainedDrone(origin, t1 ?? origin, 0, dur1, oTile),     // 1-й дрон из b
-      this.flyDroneSprite(origin, t2, dur2),                          // 2-й «слипшийся» дрон из b
-      bonus != null ? this.flyChainedDrone(bonus, bt ?? bonus, 0, durB, bTile) : Promise.resolve(), // бонусный
-      this.delay(settleMs),
-    ]);
+    const flights = targets.map((t, i) => (i === 0
+      ? this.flyChainedDrone(origin, t, 0, durs[i], oTile) // первый прячет дрон-тайл на origin
+      : this.flyDroneSprite(origin, t, durs[i])));         // остальные — отдельные спрайты ИЗ origin
+    await Promise.all([...flights, this.delay(settleMs)]);
     await this.runNaturalCascade();
-  }
-
-  /** Случайная клетка с плиткой-деньгами (не бустер), исключая переданные. */
-  private randomMoneyCell(exclude: number[]): number | null {
-    const sp = getSpecial(this.field);
-    const skip = new Set<number>(exclude);
-    const money: number[] = [];
-    for (let i = 0; i < this.field.cells.length; i++) {
-      if (!skip.has(i) && !sp[i] && isValidTier(this.field.cells[i])) money.push(i);
-    }
-    return money.length ? money[Math.floor(Math.random() * money.length)] : null;
   }
 
   /** Визуал: спрайт дрона летит дугой из fromIdx в toIdx за `dur` мс (исходный тайл прячет ВЫЗЫВАЮЩИЙ). */
