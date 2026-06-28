@@ -9,10 +9,12 @@ import { getData, save, update } from '../core/storage';
 import { commitMove, comboTotal, tileCollectValue } from '../core/economy';
 import { regenEnergy, hasEnergyForMove, spendEnergyForMove } from '../core/energy';
 import { formatMoneyFull } from '../core/money';
-import type { Tier } from '../types';
+import type { Tier, BoosterKind } from '../types';
 import type { BoosterId } from '../core/boosters';
+import { boosterIdToKind } from '../core/boosters';
 import { balance } from '../config/balance';
-import { el } from '../ui/dom/dom';
+import { el, centerTransform } from '../ui/dom/dom';
+import { boosterIconUrl } from '../ui/dom/boosterArt';
 import { HeaderView } from '../ui/dom/headerView';
 import { BalanceCardView, MONEY_TARGET } from '../ui/dom/balanceCardView';
 import { OffersView } from '../ui/dom/offersView';
@@ -36,6 +38,8 @@ export class GameApp {
   private moveBaseSum = 0; // накопленная база денег за текущий ход (до комбо-бонуса)
   private moveCombo = 0;   // накопленный уровень комбо за ход (число натуральных матч-групп)
   private energyTimer: number | null = null;
+  // Перетаскивание бустера из инвентаря на поле (drag-постановка).
+  private drag: { id: BoosterId; kind: BoosterKind; ghost: HTMLElement; pointerId: number } | null = null;
 
   constructor(private stage: HTMLElement) {
     this.layout();
@@ -62,7 +66,7 @@ export class GameApp {
     });
 
     this.actionBar = new ActionBarView(stage, {
-      onBooster: (id) => this.onBooster(id),
+      onBoosterPickup: (id, e) => this.onBoosterPickup(id, e),
       onTab: (id) => this.onTab(id),
     });
 
@@ -202,12 +206,73 @@ export class GameApp {
     };
   }
 
-  private onBooster(id: BoosterId): void {
-    const def = balance.boosters.definitions.find((b) => b.id === id);
-    this.openStub(
-      `${def?.glyph ?? '🎁'} ${def?.name ?? 'Booster'}`,
-      'This booster is coming soon — it will affect the board (blast, clear a row/column, collect a tier, etc.).',
-    );
+  // ─── Drag-постановка бустера из инвентаря на поле ────────────────────────────
+  // Кнопка-бустер — источник: тянем «призрак» на поле и ставим на клетку. Что стояло на клетке —
+  // ЗАМЕНЯЕТСЯ (не собирается, не активируется). Это не ход: энергия не тратится, каскад не идёт.
+
+  /** Перевод экранной точки в дизайн-координаты #stage (учёт FIT-масштаба). */
+  private clientToDesign(clientX: number, clientY: number): { x: number; y: number } {
+    const r = this.stage.getBoundingClientRect();
+    const scale = r.width / DESIGN_W;
+    return { x: (clientX - r.left) / scale, y: (clientY - r.top) / scale };
+  }
+
+  private onBoosterPickup(id: BoosterId, e: PointerEvent): void {
+    if (this.drag) return; // уже тянем
+    if ((getData().boosters[id] ?? 0) <= 0) return; // подстраховка (кнопка тоже проверяет)
+    const kind = boosterIdToKind(id);
+    const ghost = el('div', { cls: 'hb-booster-ghost', parent: this.stage });
+    const img = el('img', { parent: ghost }) as HTMLImageElement;
+    img.src = boosterIconUrl(kind); img.alt = ''; img.draggable = false;
+    this.drag = { id, kind, ghost, pointerId: e.pointerId };
+    this.moveGhost(e.clientX, e.clientY);
+    window.addEventListener('pointermove', this.onDragMove);
+    window.addEventListener('pointerup', this.onDragEnd);
+    window.addEventListener('pointercancel', this.onDragEnd);
+  }
+
+  private moveGhost(clientX: number, clientY: number): void {
+    if (!this.drag) return;
+    const d = this.clientToDesign(clientX, clientY);
+    this.drag.ghost.style.transform = centerTransform(d.x, d.y, 1.1);
+  }
+
+  private onDragMove = (e: PointerEvent): void => {
+    if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+    this.moveGhost(e.clientX, e.clientY);
+    this.board.setDropHover(this.board.cellFromClient(e.clientX, e.clientY));
+  };
+
+  private onDragEnd = (e: PointerEvent): void => {
+    if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+    const { id, kind, ghost } = this.drag;
+    window.removeEventListener('pointermove', this.onDragMove);
+    window.removeEventListener('pointerup', this.onDragEnd);
+    window.removeEventListener('pointercancel', this.onDragEnd);
+    this.drag = null;
+    this.board.setDropHover(-1);
+
+    const idx = this.board.cellFromClient(e.clientX, e.clientY);
+    const have = getData().boosters[id] ?? 0;
+    if (idx !== -1 && have > 0 && this.board.placeBooster(idx, kind)) {
+      update((d) => { d.boosters[id] = Math.max(0, (d.boosters[id] ?? 0) - 1); });
+      this.actionBar.refresh();
+      save();
+      ghost.remove(); // на месте уже «вылупляется» настоящий бустер
+    } else {
+      const a = ghost.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
+      a.onfinish = () => ghost.remove();
+    }
+  };
+
+  private cancelDrag(): void {
+    if (!this.drag) return;
+    window.removeEventListener('pointermove', this.onDragMove);
+    window.removeEventListener('pointerup', this.onDragEnd);
+    window.removeEventListener('pointercancel', this.onDragEnd);
+    this.board.setDropHover(-1);
+    this.drag.ghost.remove();
+    this.drag = null;
   }
 
   private onTab(id: TabId): void {
@@ -231,6 +296,7 @@ export class GameApp {
     window.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pagehide', this.onPageHide);
     if (this.energyTimer !== null) window.clearInterval(this.energyTimer);
+    this.cancelDrag();
     this.board.destroy();
   }
 }

@@ -814,6 +814,15 @@ body {
   box-shadow: inset 0 0 0 2px #ffd23f;
 }
 
+/* Рамка-приёмник при drag-постановке бустера из инвентаря (поверх плиток, центр прозрачный). */
+.board-drop-hint {
+  position: absolute;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 3px #ffd23f, 0 0 12px 2px rgba(255, 210, 63, 0.7);
+  pointer-events: none;
+  z-index: 6;
+}
+
 /* Бустеры на поле (из сложного матча: 💣 / 🚀 / 🧲): только PNG-иконка на обычной плашке
    (без чёрной подложки и без подсветки ячейки). */
 .board-tile.board-booster {
@@ -1068,7 +1077,7 @@ body {
 
 /* ── Кнопки-бустеры ────────────────────────────────────────────────────────── */
 .hb-booster {
-  position: absolute; border-radius: 50%; cursor: pointer;
+  position: absolute; border-radius: 50%; cursor: grab; touch-action: none;
   /* заливка (padding-box) + полупрозрачная градиентная обводка (border-box, светлая сверху → прозрачная снизу) */
   border: 1.5px solid transparent;
   background:
@@ -1079,6 +1088,14 @@ body {
 .hb-booster-gloss { position: absolute; left: 6%; top: 6%; width: 88%; height: 88%; object-fit: contain; display: block; pointer-events: none; }
 .hb-booster-icon { position: absolute; left: 9%; top: 9%; width: 82%; height: 82%; object-fit: contain; display: block; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .hb-booster-count { position: absolute; right: -2px; bottom: -4px; min-width: 18px; font: 700 20px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-align: right; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 3px rgba(0, 0, 0, 0.6); }
+
+/* «Призрак» бустера, который тянут из инвентаря на поле (следует за пальцем, в дизайн-координатах #stage). */
+.hb-booster-ghost {
+  position: absolute; left: 0; top: 0; width: 58px; height: 58px;
+  pointer-events: none; z-index: 50; opacity: 0.95;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+}
+.hb-booster-ghost img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 /* ── Нижнее меню (5 вкладок) ───────────────────────────────────────────────── */
 .hb-nav { position: absolute; }

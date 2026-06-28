@@ -2,11 +2,24 @@
 // Эта итерация: 4 типа-ЗАГЛУШКИ (реальные эффекты — будущая фаза). Из рабочего —
 // только shuffleBoard (используется при дедлоке поля и будущим бустером «Перемешать»).
 
-import type { FieldState } from '../types';
+import type { FieldState, BoosterKind } from '../types';
 import { getSpecial } from './board';
 
 /** Идентификаторы 4 бустеров-кнопок (макет Hamster Bank). Расширяется по мере итераций. */
 export type BoosterId = 'bomb' | 'drone' | 'rocket' | 'magnet';
+
+/**
+ * Бустер-кнопка инвентаря → объект-бустер на поле (при drag-постановке из инвентаря на клетку).
+ * Ракета кладётся ГОРИЗОНТАЛЬНОЙ (иконка инвентаря — Rocket_horizontal, см. boosterArt).
+ */
+export function boosterIdToKind(id: BoosterId): BoosterKind {
+  switch (id) {
+    case 'bomb': return 'bomb';
+    case 'drone': return 'drone';
+    case 'magnet': return 'magnet';
+    case 'rocket': return 'rocket-h';
+  }
+}
 
 /**
  * Перемешать ТОЛЬКО плитки-деньги (клетки без спецобъекта), оставив бустеры и собираемые

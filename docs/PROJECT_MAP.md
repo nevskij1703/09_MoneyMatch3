@@ -28,7 +28,7 @@
 | Карта Баланс+Алмазы + маскот + декор | [src/ui/dom/balanceCardView.ts](../src/ui/dom/balanceCardView.ts) |
 | Офферы SALE / Watch Ad | [src/ui/dom/offersView.ts](../src/ui/dom/offersView.ts) |
 | Строка Level / Energy / Income | [src/ui/dom/infoRowView.ts](../src/ui/dom/infoRowView.ts) |
-| Низ: 4 кнопки-бустера + меню 5 вкладок | [src/ui/dom/actionBarView.ts](../src/ui/dom/actionBarView.ts) |
+| Низ: 4 кнопки-бустера (drag-источник на поле) + меню 5 вкладок | [src/ui/dom/actionBarView.ts](../src/ui/dom/actionBarView.ts) |
 | Спрайт тира (PNG 128×128 на всю клетку) / fallback-круг | [src/ui/dom/tierArt.ts](../src/ui/dom/tierArt.ts) |
 | Оркестратор экрана (FIT 390×844, сбор→карта, заглушки) | [src/app/GameApp.ts](../src/app/GameApp.ts) |
 | Сохранение / миграции / mergeDefaults | [src/core/storage.ts](../src/core/storage.ts), [src/core/migrations.ts](../src/core/migrations.ts) |
@@ -78,7 +78,7 @@ src/
     │   ├── infoRowView.ts   Level / Energy / Income (из сейва/конфига)
     │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, рендер плиток/бустеров/собираемых; ЕДИНЫЙ detonateBlasts (все активации/цепочки/комбо: каждый бустер бьёт из своего центра, дрон взлетает), полёт дрона/💎/⚡, реакция-гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
-    │   └── actionBarView.ts 4 круглые кнопки-бустера (счётчик) + нижнее меню 5 вкладок (Игра — центр)
+    │   └── actionBarView.ts 4 круглые кнопки-бустера (счётчик; drag-источник постановки на поле) + нижнее меню 5 вкладок (Игра — центр)
     │
     ├── stubModal.ts         Generic «раздел в разработке»
     ├── settingsModal.ts     Настройки (sound/vibration; точка входа на экране пока заглушка)
@@ -118,4 +118,13 @@ src/
    5×5 / 3+3 / крест / всё поле / магнит-спавн / 3 дрона / дрон-уносит-бустер. Энергия списана на
    свайпе (шаг 1). Анти-дедлок (`hasAnyValidMove` → shuffle; только бустеры = гарант.ход). Сейв.
 
-**Тап по кнопке-бустеру / офферу / вкладке / 🔔:** → `stubModal` (заглушки этой итерации).
+**Drag кнопки-бустера на поле:** нажатие на кнопку при наличии штук (пусто → тряска-отказ) →
+`onBoosterPickup`: `GameApp` ведёт «призрак» (`.hb-booster-ghost`, дизайн-координаты #stage) за
+пальцем и подсвечивает клетку-приёмник (`board.setDropHover` → `.board-drop-hint`). Отпускание над
+клеткой → `board.placeBooster(idx, kind)`: что там стояло (плитка/бустер/собираемый/🎁сейф) —
+просто **ЗАМЕНЯЕТСЯ** (старое тает, новый бустер «вылупляется»), **без сбора и без активации**;
+счётчик −1, сейв. Это **не ход**: энергия не тратится, каскад не запускается. Отпускание вне поля /
+поле занято (`board.isBusy`) → отмена (призрак гаснет). `bomb/drone/rocket/magnet` → объект на поле
+`boosterIdToKind` (ракета — горизонтальная). Хит-тест — `board.cellFromClient`.
+
+**Тап по офферу / вкладке / 🔔:** → `stubModal` (заглушки этой итерации).

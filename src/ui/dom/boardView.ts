@@ -89,6 +89,7 @@ export class BoardView {
   private panel: HTMLDivElement;
   private cellEls: HTMLDivElement[] = [];
   private tileByIndex = new Map<number, HTMLElement>();
+  private dropHint!: HTMLDivElement; // рамка-подсветка клетки при drag-постановке бустера из инвентаря
   private busy = false;
 
   // Жест.
@@ -117,6 +118,11 @@ export class BoardView {
     });
 
     this.buildCells();
+    this.dropHint = el('div', {
+      cls: 'board-drop-hint',
+      style: `width:${this.cellW}px;height:${this.cellH}px;display:none;`,
+      parent: this.panel,
+    });
     this.settleInitial();
 
     this.panel.addEventListener('pointerdown', this.onPointerDown);
@@ -225,6 +231,62 @@ export class BoardView {
     const cy = Math.floor(localY / this.strideY);
     if (cx < 0 || cy < 0 || cx >= this.field.cols || cy >= this.field.rows) return -1;
     return xyToIdx(cx, cy, this.field.cols);
+  }
+
+  // ─── Drag-постановка бустера из инвентаря (GameApp оркестрирует «призрак» и хит-тест) ─────────
+
+  /** Идёт ли сейчас анимация/каскад (drag-постановку в этот момент применять нельзя). */
+  isBusy(): boolean { return this.busy; }
+
+  /** Индекс клетки под экранной точкой (для drag-дропа из инвентаря), или -1 вне поля. */
+  cellFromClient(clientX: number, clientY: number): number {
+    const local = this.pointerToLocal(clientX, clientY);
+    return this.localToCell(local.x, local.y);
+  }
+
+  /** Подсветить клетку-приёмник при перетаскивании бустера (idx<0 — спрятать рамку). */
+  setDropHover(idx: number): void {
+    if (idx < 0 || idx >= this.field.cells.length) { this.dropHint.style.display = 'none'; return; }
+    const { x, y } = idxToXY(idx, this.field.cols);
+    this.dropHint.style.left = `${x * this.strideX}px`;
+    this.dropHint.style.top = `${y * this.strideY}px`;
+    this.dropHint.style.display = 'block';
+  }
+
+  /**
+   * Поставить бустер из инвентаря на клетку idx. Что бы там ни стояло (плитка/бустер/собираемый/сейф) —
+   * просто ЗАМЕНЯЕТСЯ: НЕ собирается и НЕ активируется. Старый объект тает на месте, новый бустер
+   * «вылупляется». Это не ход (энергия не тратится, каскад не запускается). false — если поле занято.
+   */
+  placeBooster(idx: number, kind: BoosterKind): boolean {
+    if (this.busy || idx < 0 || idx >= this.field.cells.length) return false;
+    const sp = getSpecial(this.field);
+    const c = this.cellCenter(idx);
+    const old = this.tileByIndex.get(idx);
+    if (old) {
+      const a = old.animate(
+        [
+          { transform: centerTransform(c.x, c.y, 1), opacity: 1 },
+          { transform: centerTransform(c.x, c.y, 0.5), opacity: 0 },
+        ],
+        { duration: 160, easing: EASE_OUT, fill: 'forwards' },
+      );
+      a.onfinish = () => old.remove();
+    }
+    this.field.cells[idx] = null;
+    sp[idx] = kind;
+    const tile = this.makeBoosterTile(idx, kind);
+    this.tileByIndex.set(idx, tile);
+    tile.animate(
+      [
+        { transform: centerTransform(c.x, c.y, 0.4), opacity: 0, offset: 0 },
+        { transform: centerTransform(c.x, c.y, 1.12), opacity: 1, offset: 0.7 },
+        { transform: centerTransform(c.x, c.y, 1), offset: 1 },
+      ],
+      { duration: Math.round(anim.spawnMs * 0.7), easing: EASE_OUT },
+    );
+    this.callbacks.onPersist();
+    return true;
   }
 
   // ─── Ввод (свайп + тап) ──────────────────────────────────────────────────────

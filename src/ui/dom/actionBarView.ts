@@ -14,7 +14,8 @@ import { boosterIconUrl } from './boosterArt';
 export type TabId = 'build' | 'tasks' | 'collections' | 'shop';
 
 export interface ActionBarCallbacks {
-  onBooster(id: BoosterId): void;
+  /** Захват бустера из инвентаря для drag-постановки на поле (только если в инвентаре есть штуки). */
+  onBoosterPickup(id: BoosterId, e: PointerEvent): void;
   onTab(id: TabId): void;
 }
 
@@ -64,7 +65,13 @@ export class ActionBarView {
       const icon = el('img', { cls: 'hb-booster-icon', parent: btn }) as HTMLImageElement;
       icon.src = boosterIconUrl(def.id); icon.alt = def.name; icon.draggable = false;
       const count = el('div', { cls: 'hb-booster-count', text: '0', parent: btn });
-      btn.addEventListener('pointerup', () => this.callbacks.onBooster(def.id));
+      // Бустер-кнопка — ИСТОЧНИК для drag-постановки на поле. Нажатие при наличии штук → захват
+      // (GameApp ведёт «призрак» и ставит на клетку). Пусто → тряска-отказ, без захвата.
+      btn.addEventListener('pointerdown', (e) => {
+        if ((getData().boosters[def.id] ?? 0) <= 0) { this.shake(btn); return; }
+        try { btn.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        this.callbacks.onBoosterPickup(def.id, e);
+      });
       this.boosters.push({ id: def.id, count });
     }
   }
@@ -100,6 +107,17 @@ export class ActionBarView {
 
   private selLeft(i: number): number {
     return NAV_BASE_LEFT + i * TAB_W + (TAB_W - SEL_W) / 2;
+  }
+
+  /** Тряска кнопки-бустера, когда штук в инвентаре нет (отказ захвата). */
+  private shake(btn: HTMLElement): void {
+    btn.animate(
+      [
+        { transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' },
+        { transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' },
+      ],
+      { duration: 280, easing: 'ease-in-out' },
+    );
   }
 
   refresh(): void {
