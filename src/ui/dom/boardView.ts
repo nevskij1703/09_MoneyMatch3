@@ -427,6 +427,8 @@ export class BoardView {
     noDetonate?: Iterable<number>;
     keep?: Iterable<number>;
     fireOffsets?: Map<number, number>;
+    spawns?: MatchSpawn[];   // бустеры, рождённые матчем в этом же шаге (выживают, НЕ детонируют — immune)
+    byMatch?: boolean;       // схлоп содержит натуральный матч → собираемые ловятся и по соседству
   }): Promise<void> {
     const baseCells = opts.baseCells ? [...opts.baseCells] : [];
     const { blasts, cleared } = collectBoosterBlasts(this.field, opts.primaries, baseCells, opts.noDetonate ?? [], Math.random);
@@ -443,7 +445,7 @@ export class BoardView {
       else if (b.kind === 'rocket-h' || b.kind === 'rocket-v') fx.push(this.fxRocketSweep(b.idx, b.kind, b.fireTime));
       else if (b.kind === 'magnet') fx.push(this.fxMagnetSelect(b.cells, b.fireTime));
     }
-    const step = applyClear(this.field, cleared, [], balance.tierCount, Math.random);
+    const step = applyClear(this.field, cleared, opts.spawns ?? [], balance.tierCount, Math.random, opts.byMatch ?? false);
     const { settleMs } = this.animateStep(step, { origin: opts.origin, mode: 'radial', delays });
     await Promise.all([
       this.delay(settleMs),
@@ -647,16 +649,23 @@ export class BoardView {
     await this.activateOneBooster(self, target, extra);
   }
 
-  /** Свайп бустер+плитка с матчем: схлоп матча (родит бустеры) → затем активация бустера; новые — иммунны. */
+  /**
+   * Свайп бустера на ПЛИТКУ, образовавший матч: матч схлопывается И свайпнутый бустер срабатывает
+   * ОДНИМ шагом — бустер активируется СРАЗУ (без задержки на гравитацию). Рождённые матчем бустеры —
+   * immune: выживают (`spawns` + `keep`) и НЕ активируются этим бустером (на момент chain они ещё плитки).
+   */
   private async boosterSwapWithMatch(boosterCell: number, tileCell: number, magnetTarget: Tier | null): Promise<void> {
     const m = findMatches(this.field, [tileCell], Math.random);
-    const step = applyClear(this.field, m.cleared, m.spawns, balance.tierCount, Math.random, true); // натуральный матч от свайпа
-    await this.delay(this.animateStep(step).settleMs);
-    // Новые позиции после гравитации этого шага (бустер и заспавненные могли «упасть»).
-    const moveOf = (idx: number): number => { const f = step.falls.find((ff) => ff.from === idx); return f ? f.to : idx; };
-    const selfNow = moveOf(boosterCell);
-    const immune = new Set<number>(step.spawns.map((s) => moveOf(s.idx)));
-    await this.activateOneBooster(selfNow, magnetTarget, undefined, immune);
+    await this.detonateBlasts({
+      primaries: [{ idx: boosterCell, target: magnetTarget }],
+      origin: boosterCell,
+      baseCells: m.cleared,                  // клетки матча гаснут вместе с бустером (мгновенно)
+      baseInstant: true,
+      spawns: m.spawns,                      // бустеры из матча выживают…
+      keep: m.spawns.map((s) => s.idx),      // …и не попадают под снос/детонацию
+      byMatch: true,
+    });
+    await this.runNaturalCascade();
   }
 
   /**
@@ -905,8 +914,15 @@ export class BoardView {
 
     const popDelay = this.popDelayFn(step.cleared, timing);
     let maxPop = 0;
-    if (timing && (timing.mode === 'radial' || timing.delays)) for (const idx of step.cleared) maxPop = Math.max(maxPop, popDelay(idx, 0));
-    const gravityDelay = maxPop; // гравитация — после волны pop'ов (для каскада/instant = 0)
+    if (timing?.delays) {
+      // По ВСЕМ delays, а не только step.cleared: цель дрона, ставшая спавном (🎁 СЕЙФ), выпадает из
+      // step.cleared, но её момент = flightDur. Если не учесть — гравитация стартует ДО приземления
+      // дрона, поле «съезжает» под летящим дроном и он попадает не туда. Гравитация ждёт ВСЕ эффекты.
+      for (const v of timing.delays.values()) maxPop = Math.max(maxPop, v);
+    } else if (timing && timing.mode === 'radial') {
+      for (const idx of step.cleared) maxPop = Math.max(maxPop, popDelay(idx, 0));
+    }
+    const gravityDelay = maxPop; // гравитация — после ВСЕХ pop'ов/полётов (для натур. каскада = 0)
 
     step.cleared.forEach((idx, k) => {
       if (collectedSet.has(idx)) return; // собрано отдельно (полёт)
