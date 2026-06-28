@@ -295,14 +295,19 @@ export function pickDroneFlightTarget(
   return null;
 }
 
-/** Зона дрона: «плюс» (центр + 4 стороны) + клетка-цель полёта. flightTarget=null → поле пусто. */
+/**
+ * Зона дрона + клетка-цель полёта. `includePlus` — собирать ли «плюс» (центр + 4 стороны) на взлёте:
+ * ПРЯМАЯ активация (свайп/тап/комбо-примар) — да; ЦЕПНАЯ (дрон задет волной другого бустера) — НЕТ,
+ * тогда зона = только своя клетка (взлёт) + цель. flightTarget=null → поле пусто.
+ */
 export function droneTargets(
   field: FieldState,
   idx: number,
   rng: () => number = Math.random,
   exclude?: Iterable<number>,
+  includePlus = true,
 ): { cells: Set<number>; flightTarget: number | null } {
-  const cells = cellsInPlus(field, idx);
+  const cells = includePlus ? cellsInPlus(field, idx) : new Set<number>([idx]);
   const flightTarget = pickDroneFlightTarget(field, idx, rng, exclude);
   if (flightTarget != null) cells.add(flightTarget);
   return { cells, flightTarget };
@@ -354,8 +359,12 @@ export function pickRandomPresentTier(field: FieldState, rng: () => number = Mat
   return present[Math.floor(rng() * present.length)];
 }
 
-/** Одна детонация в цепочке: клетка бустера `idx`, вид `kind`, клетки зоны `cells`; для дрона — цель полёта `flightTarget`. */
-export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; flightTarget: number | null; }
+/**
+ * Одна детонация в цепочке: клетка бустера `idx`, вид `kind`, клетки зоны `cells`; для дрона — цель полёта
+ * `flightTarget`. `primary` — ПРЯМАЯ активация (свайп/тап/комбо-примар), а не цепная: для дрона значит
+ * «собирает плюс на взлёте»; цепной дрон (primary=false) просто взлетает без сноса 4 клеток вокруг.
+ */
+export interface BoosterBlast { idx: number; kind: SpecialKind; cells: number[]; flightTarget: number | null; primary: boolean; }
 
 /**
  * ЕДИНАЯ раскрутка детонаций: примарные бустеры `primaries` (каждый со своей целью) + начальная зона
@@ -377,25 +386,25 @@ export function collectBoosterBlasts(
   const cleared = new Set<number>(seedCells);
   const fired = new Set<number>(noDetonate);
   const blasts: BoosterBlast[] = [];
-  const queue: { idx: number; target: Tier | null }[] = [];
-  const enqueue = (idx: number, target: Tier | null): void => {
-    if (isBooster(sp[idx]) && !fired.has(idx)) { fired.add(idx); queue.push({ idx, target }); }
+  const queue: { idx: number; target: Tier | null; primary: boolean }[] = [];
+  const enqueue = (idx: number, target: Tier | null, primary: boolean): void => {
+    if (isBooster(sp[idx]) && !fired.has(idx)) { fired.add(idx); queue.push({ idx, target, primary }); }
   };
-  for (const p of primaries) enqueue(p.idx, p.target);
-  for (const c of seedCells) enqueue(c, sp[c] === 'magnet' ? pickNearestTileTier(field, c, rng) : null);
+  for (const p of primaries) enqueue(p.idx, p.target, true);                                                   // прямая активация
+  for (const c of seedCells) enqueue(c, sp[c] === 'magnet' ? pickNearestTileTier(field, c, rng) : null, false); // пойман зоной комбо → цепной
   for (let head = 0; head < queue.length; head++) {
-    const { idx, target } = queue[head];
-    // Дрон: его зону считаем через droneTargets (плюс + СЛУЧАЙНАЯ цель полёта) ОДНИМ роллом и запоминаем
-    // flightTarget — чтобы анимировать ВЗЛЁТ (а не просто снести клетки общей волной).
-    const dt = sp[idx] === 'drone' ? droneTargets(field, idx, rng, fired) : null;
+    const { idx, target, primary } = queue[head];
+    // Дрон: зона через droneTargets (цель полёта ОДНИМ роллом, запоминаем flightTarget для анимации ВЗЛЁТА).
+    // ПРЯМОЙ дрон собирает «плюс» на взлёте; ЦЕПНОЙ (primary=false) — просто взлетает (без сноса 4 клеток).
+    const dt = sp[idx] === 'drone' ? droneTargets(field, idx, rng, fired, primary) : null;
     const zone = dt ? dt.cells : boosterTargets(field, idx, target, rng);
     const cells: number[] = [];
     for (const t of zone) {
       cleared.add(t);
       cells.push(t);
-      enqueue(t, sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null);
+      enqueue(t, sp[t] === 'magnet' ? pickNearestTileTier(field, t, rng) : null, false); // обнаружен по цепи → цепной
     }
-    blasts.push({ idx, kind: sp[idx] as SpecialKind, cells, flightTarget: dt ? dt.flightTarget : null });
+    blasts.push({ idx, kind: sp[idx] as SpecialKind, cells, flightTarget: dt ? dt.flightTarget : null, primary });
   }
   return { blasts, cleared };
 }

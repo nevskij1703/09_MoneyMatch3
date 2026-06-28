@@ -449,7 +449,7 @@ export class BoardView {
     const { settleMs } = this.animateStep(step, { origin: opts.origin, mode: 'radial', delays });
     await Promise.all([
       this.delay(settleMs),
-      ...flights.map((fl) => this.flyChainedDrone(fl.from, fl.to, fl.at, fl.dur, droneTiles.get(fl.from))),
+      ...flights.map((fl) => this.flyChainedDrone(fl.from, fl.to, fl.at, fl.dur, droneTiles.get(fl.from), fl.rays)),
       ...fx,
     ]);
   }
@@ -468,13 +468,13 @@ export class BoardView {
     baseInstant: boolean,
     extra: number | undefined,
     fireOffsets?: Map<number, number>,
-  ): { delays: Map<number, number>; flights: { from: number; to: number; at: number; dur: number }[]; timed: (BoosterBlast & { fireTime: number })[] } {
+  ): { delays: Map<number, number>; flights: { from: number; to: number; at: number; dur: number; rays: boolean }[]; timed: (BoosterBlast & { fireTime: number })[] } {
     const cols = this.field.cols;
     const waveStep = anim.boosterWaveMs / Math.max(cols, this.field.rows); // зона комбо (радиальная волна)
     const rocketStep = anim.rocketFlyMs / Math.max(cols, this.field.rows); // ракета (мс/клетку вдоль линии)
     const delays = new Map<number, number>();
     const fire = new Map<number, number>();
-    const flights: { from: number; to: number; at: number; dur: number }[] = [];
+    const flights: { from: number; to: number; at: number; dur: number; rays: boolean }[] = [];
     const timed: (BoosterBlast & { fireTime: number })[] = [];
     const setMin = (m: Map<number, number>, k: number, v: number): void => { const c = m.get(k); if (c == null || v < c) m.set(k, v); };
     const oc = this.cellCenter(origin);
@@ -488,7 +488,7 @@ export class BoardView {
       const ft = fire.get(blast.idx) ?? 0; // момент срабатывания этого бустера
       const { x: bx, y: by } = idxToXY(blast.idx, cols);
       const flightDur = blast.kind === 'drone' && blast.flightTarget != null ? this.droneFlightDur(blast.idx, blast.flightTarget) : 0;
-      if (blast.kind === 'drone' && blast.flightTarget != null) flights.push({ from: blast.idx, to: blast.flightTarget, at: ft, dur: flightDur });
+      if (blast.kind === 'drone' && blast.flightTarget != null) flights.push({ from: blast.idx, to: blast.flightTarget, at: ft, dur: flightDur, rays: blast.primary });
       for (const cell of blast.cells) {
         const { x: cx, y: cy } = idxToXY(cell, cols);
         let off: number;
@@ -580,10 +580,10 @@ export class BoardView {
   }
 
   /** Взлетающий дрон: на своём `at` прячет свой (попадающий под pop) тайл и улетает спрайтом к цели. */
-  private async flyChainedDrone(fromIdx: number, toIdx: number, at: number, dur: number, origTile?: HTMLElement): Promise<void> {
+  private async flyChainedDrone(fromIdx: number, toIdx: number, at: number, dur: number, origTile?: HTMLElement, rays = true): Promise<void> {
     if (at > 0) await this.delay(at);
     if (origTile) origTile.style.visibility = 'hidden'; // pop этого тайла станет невидимым — летит спрайт
-    this.droneRays(fromIdx); // #4 на взлёте — 4 луча света вдоль убираемого «плюса»
+    if (rays) this.droneRays(fromIdx); // #4 ПРЯМОЙ дрон: 4 луча света вдоль убираемого «плюса» (цепной — без лучей и без сноса плюса)
     await this.flyDroneSprite(fromIdx, toIdx, dur);
   }
 
