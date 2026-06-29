@@ -1177,7 +1177,7 @@ body {
   display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; box-sizing: border-box; }
 .bw-avatar { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 .bw-counter { position: relative; flex: 0 0 auto; width: 82px; height: 21px; border-radius: 10.5px;
-  border: 1px solid rgba(61, 197, 255, 0.3); display: flex; align-items: center; justify-content: space-between;
+  border: 1px solid rgba(61, 197, 255, 0.2); display: flex; align-items: center; justify-content: space-between;
   padding: 0 4px 0 3px; box-sizing: border-box; filter: drop-shadow(0 1px 0.5px rgba(0, 0, 0, 0.25)); }
 .bw-counter-left { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .bw-counter-ico { width: 18px; height: 18px; object-fit: contain; flex: 0 0 auto; }
@@ -1199,16 +1199,19 @@ body {
 .bw-locs-row { position: absolute; left: 0; top: 0; width: 390px; height: 75px;
   display: flex; align-items: flex-start; justify-content: center; gap: 18px; }
 .bw-spot { position: relative; width: 56px; height: 75px; cursor: pointer; }
+/* Круг-рамка: навy-заливка + ГРАДИЕНТНАЯ обводка (как spot_bg в Figma: #5A84C2→#2B538D). */
 .bw-spot-circle { position: absolute; left: 0; top: 0; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; box-sizing: border-box;
-  background: linear-gradient(180deg, #1b4fa6 0%, #0a2156 100%); border: 2px solid rgba(255, 255, 255, 0.25);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2), 0 2px 3px rgba(0, 0, 0, 0.35); }
-.bw-spot-circle.now { border-color: #fee900; box-shadow: 0 0 8px 1px rgba(255, 233, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.25); }
-.bw-spot-circle.locked { filter: saturate(0.7) brightness(0.85); }
+  border: 2px solid transparent;
+  background: linear-gradient(#001c5a, #001c5a) padding-box, linear-gradient(180deg, #5a84c2 0%, #2b538d 100%) border-box;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35); }
+/* Активная (текущая) локация — жёлтое кольцо + свечение (spot_bg-now). */
+.bw-spot-circle.now { background: linear-gradient(#001c5a, #001c5a) padding-box, linear-gradient(#ffe100, #ffe100) border-box;
+  box-shadow: 0 0 8px 1px rgba(255, 225, 0, 0.65); }
 .bw-spot-img { position: absolute; left: 3px; top: 3px; width: 50px; height: 50px; object-fit: contain; }
-.bw-spot-badge { position: absolute; right: -2px; top: 38px; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
-  display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; font-size: 10px; line-height: 1; }
-.bw-spot-badge.done { background: #1eb800; color: #fff; font-weight: 900; }
-.bw-spot-badge.lock { background: #0a2156; }
+/* Закрытая локация — миниатюра ЗАТЕМНЕНА. */
+.bw-spot.locked .bw-spot-img { filter: brightness(0.45); }
+/* Бейдж статуса — родной svg (✓ / замок) c градиентной обводкой; нижний-правый угол. */
+.bw-spot-badge { position: absolute; right: -2px; top: 38px; width: 18px; height: 18px; object-fit: contain; pointer-events: none; }
 .bw-spot-label { position: absolute; left: -8px; right: -8px; top: 60px; text-align: center; white-space: nowrap;
   font: 700 12px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4); }
 

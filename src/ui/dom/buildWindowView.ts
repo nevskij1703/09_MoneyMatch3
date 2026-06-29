@@ -107,15 +107,16 @@ export class BuildWindowView {
 
     const row = el('div', { cls: 'bw-locs-row', parent: wrap });
     for (const loc of balance.build.locations) {
-      const spot = el('div', { cls: 'bw-spot', parent: row });
-      const circle = el('div', {
-        cls: `bw-spot-circle${loc.state === 'active' ? ' now' : ''}${loc.state === 'locked' ? ' locked' : ''}`,
-        parent: spot,
-      });
+      const spot = el('div', { cls: `bw-spot${loc.state === 'locked' ? ' locked' : ''}`, parent: row });
+      const circle = el('div', { cls: `bw-spot-circle${loc.state === 'active' ? ' now' : ''}`, parent: spot });
       const img = el('img', { cls: 'bw-spot-img', parent: circle }) as HTMLImageElement;
       img.src = `assets/build/spots/${loc.art}`; img.alt = ''; img.draggable = false;
-      if (loc.state === 'done') el('div', { cls: 'bw-spot-badge done', text: '✓', parent: spot });
-      if (loc.state === 'locked') el('div', { cls: 'bw-spot-badge lock', text: '🔒', parent: spot });
+      // Бейдж статуса — РОДНОЙ svg из Figma (с градиентной обводкой): ✓ для пройденной, замок для закрытой.
+      if (loc.state === 'done' || loc.state === 'locked') {
+        const badge = el('img', { cls: 'bw-spot-badge', parent: spot }) as HTMLImageElement;
+        badge.src = loc.state === 'done' ? 'assets/build/icon-done.svg' : 'assets/build/icon-locked.svg';
+        badge.alt = ''; badge.draggable = false;
+      }
       el('div', { cls: 'bw-spot-label', text: loc.name, parent: spot });
       spot.addEventListener('pointerup', () => {
         if (loc.state === 'locked') this.callbacks.onStub('🔒 Locked', `${loc.name} unlocks later — keep upgrading your bank.`);
