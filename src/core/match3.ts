@@ -307,7 +307,16 @@ export function droneTargets(
   exclude?: Iterable<number>,
   includePlus = true,
 ): { cells: Set<number>; flightTarget: number | null } {
-  const cells = includePlus ? cellsInPlus(field, idx) : new Set<number>([idx]);
+  let cells: Set<number>;
+  if (includePlus) {
+    cells = cellsInPlus(field, idx); // ПРЯМОЙ дрон: сносит весь «плюс» (центр + 4 стороны)
+  } else {
+    // ЦЕПНОЙ дрон: плитки из-под себя НЕ сносит — но 🎁 СЕЙФ, попавший в «плюс» при взлёте, ВСКРЫВАЕТ
+    // (сейф открывается любым прямым попаданием бустера; взлёт дрона над ним — такое попадание).
+    cells = new Set<number>([idx]);
+    const sp = getSpecial(field);
+    for (const c of cellsInPlus(field, idx)) if (sp[c] === 'safe') cells.add(c);
+  }
   const flightTarget = pickDroneFlightTarget(field, idx, rng, exclude);
   if (flightTarget != null) cells.add(flightTarget);
   return { cells, flightTarget };

@@ -59,7 +59,7 @@ src/
 │   │                        countMatchGroups, applyClear/resolveStep, applyGravityAndRefill (+спавн 💎/⚡/🎁),
 │   │                        resolveCollectibles (сбор/открытие), wouldSwapMatch, hasAnyValidMove, makeMatch3Board;
 │   │                        эффекты бустеров: boosterTargets/pickNearestTileTier/collectBoosterBlasts (ЕДИНАЯ раскрутка детонаций+цепочки по-бустерно),
-│   │                        cellsInPlus/droneTargets(includePlus)/pickDroneFlightTarget (дрон: плюс только у ПРЯМОГО; полёт преим. в обычную плитку; два дрона не берут одну цель — claimed),
+│   │                        cellsInPlus/droneTargets(includePlus)/pickDroneFlightTarget (дрон: плюс-снос только у ПРЯМОГО, но 🎁 сейф в плюсе вскрывает и ЦЕПНОЙ; полёт преим. в обычную плитку; два дрона не берут одну цель — claimed),
 │   │                        cellsInSquare/cellsInRows/cellsInCols/pickRandomPresentTier (комбо)
 │   ├── economy.ts           tileCollectValue, comboMoneyMultiplier, comboTotal, commitMove
 │   ├── money.ts             tierValue=t (линейно: T_t стоит t), formatMoney, formatMoneyFull (все знаки), getTierStyle
@@ -126,7 +126,7 @@ src/
    **карту** (`flyMoneyToBalance` → `card.refresh()` + bump). Бустеры активируются МГНОВЕННО (после
    перемещения / тапом; БЕЗ «завода»-паузы), каждый — СВОЕЙ анимацией (`planDetonation`/`detonateBlasts`):
    💣 взрыв 3×3 + вспышка; 🚀 два спрайта летят в обе стороны, гася путь; 🛸 ПРЯМОЙ — «плюс» сразу → полёт
-   к цели (ЦЕПНОЙ дрон «плюс» НЕ сносит, просто взлетает — `droneTargets(..., includePlus=blast.primary)`);
+   к цели (ЦЕПНОЙ дрон «плюс» НЕ сносит, просто взлетает — но 🎁 сейф в «плюсе» вскрывает; `droneTargets(..., includePlus=blast.primary)`);
    🧲 выделение тира → снос ВОЛНОЙ СВЕРХУ ВНИЗ. ЦЕПЬ: задетый бустер срабатывает мгновенно (`fireTime` =
    момент прихода эффекта) своей анимацией. Комбо двух (`boosterPairCombo`): ВЫБРАННЫЙ едет на
    ПРИНИМАЮЩЕГО (тот НЕПОДВИЖЕН), комбо целиком из клетки принимающего — 5×5 / 3+3 / крест / всё поле /
