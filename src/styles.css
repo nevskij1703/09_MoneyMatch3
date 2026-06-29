@@ -1185,9 +1185,14 @@ body {
 .bw-counter-ico.energy { width: 12px; height: 16px; }
 .bw-counter-val { font: 700 13px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; white-space: nowrap; }
 .bw-e-max { font-size: 11px; opacity: 0.5; margin-left: 1px; }
+/* «+»: синяя заливка (padding-box) + ГРАДИЕНТНАЯ глянцевая обводка (border-box: белый сверху → прозрачный снизу). */
 .bw-add { width: 14px; height: 14px; border-radius: 10px; flex: 0 0 auto; cursor: pointer;
-  background: linear-gradient(180deg, #075bd9 0%, #0849af 100%); border: 0.5px solid #fff;
-  box-shadow: 0 2px 1px rgba(0, 0, 0, 0.25); color: #fff; font: 700 12px 'Roboto Flex', sans-serif; line-height: 12px; text-align: center; }
+  display: flex; align-items: center; justify-content: center;
+  border: 0.7px solid transparent;
+  background:
+    linear-gradient(180deg, #075bd9 0%, #0849af 100%) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.3) 55%, rgba(255, 255, 255, 0.06) 100%) border-box;
+  box-shadow: 0 2px 1px rgba(0, 0, 0, 0.25); color: #fff; font: 700 11px 'Roboto Flex', sans-serif; line-height: 1; }
 .bw-settings { width: 30px; height: 30px; object-fit: contain; flex: 0 0 auto; cursor: pointer; }
 
 /* ── Ряд локаций (визуал; интерактивна только активная) ── */
