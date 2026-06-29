@@ -307,17 +307,13 @@ export function droneTargets(
   exclude?: Iterable<number>,
   includePlus = true,
 ): { cells: Set<number>; flightTarget: number | null } {
-  let cells: Set<number>;
-  if (includePlus) {
-    cells = cellsInPlus(field, idx); // ПРЯМОЙ дрон: сносит весь «плюс» (центр + 4 стороны)
-  } else {
-    // ЦЕПНОЙ дрон: плитки из-под себя НЕ сносит — но 🎁 СЕЙФ, попавший в «плюс» при взлёте, ВСКРЫВАЕТ
-    // (сейф открывается любым прямым попаданием бустера; взлёт дрона над ним — такое попадание).
-    cells = new Set<number>([idx]);
-    const sp = getSpecial(field);
-    for (const c of cellsInPlus(field, idx)) if (sp[c] === 'safe') cells.add(c);
-  }
-  const flightTarget = pickDroneFlightTarget(field, idx, rng, exclude);
+  const cells = includePlus ? cellsInPlus(field, idx) : new Set<number>([idx]);
+  // Цель полёта — ВНЕ зоны взлёта: всё, что в зоне (для ПРЯМОГО дрона — весь «плюс»), гасится/вскрывается
+  // СРАЗУ на взлёте. Поэтому 🎁 сейф в «плюсе» ПРЯМОГО дрона открывается тут же (а не «долётом» к нему),
+  // и дрон не тратит полёт на соседнюю клетку — летит к цели за пределами «плюса».
+  const flightExclude = new Set<number>(exclude ?? []);
+  for (const c of cells) flightExclude.add(c);
+  const flightTarget = pickDroneFlightTarget(field, idx, rng, flightExclude);
   if (flightTarget != null) cells.add(flightTarget);
   return { cells, flightTarget };
 }
