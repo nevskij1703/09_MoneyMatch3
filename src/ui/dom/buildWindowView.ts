@@ -107,7 +107,7 @@ export class BuildWindowView {
 
     const row = el('div', { cls: 'bw-locs-row', parent: wrap });
     for (const loc of balance.build.locations) {
-      const spot = el('div', { cls: `bw-spot${loc.state === 'locked' ? ' locked' : ''}`, parent: row });
+      const spot = el('div', { cls: 'bw-spot', parent: row });
       const circle = el('div', { cls: `bw-spot-circle${loc.state === 'active' ? ' now' : ''}`, parent: spot });
       const img = el('img', { cls: 'bw-spot-img', parent: circle }) as HTMLImageElement;
       img.src = `assets/build/spots/${loc.art}`; img.alt = ''; img.draggable = false;
