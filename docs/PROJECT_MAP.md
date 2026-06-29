@@ -33,7 +33,7 @@
 | Окно «Build» (вкладка слева): счётчики, ряд локаций, арт локации, карточки построек, прокачка | [src/ui/dom/buildWindowView.ts](../src/ui/dom/buildWindowView.ts) |
 | Логика Build (цена-лесенка costMin→costMax, buildStep/canUpgrade/locationProgress) | [src/core/build.ts](../src/core/build.ts) |
 | Спрайт тира (PNG 128×128 на всю клетку) / fallback-круг | [src/ui/dom/tierArt.ts](../src/ui/dom/tierArt.ts) |
-| Оркестратор экрана (FIT 390×844, сбор→карта, заглушки) | [src/app/GameApp.ts](../src/app/GameApp.ts) |
+| Оркестратор экрана (масштаб 390×844 под высоту вьюпорта, сбор→карта, заглушки, окно Build) | [src/app/GameApp.ts](../src/app/GameApp.ts) |
 | Сохранение / миграции / mergeDefaults | [src/core/storage.ts](../src/core/storage.ts), [src/core/migrations.ts](../src/core/migrations.ts) |
 | Бустеры (id bomb/drone/rocket/magnet + shuffleBoard) | [src/core/boosters.ts](../src/core/boosters.ts) |
 | Арт макета | `public/assets/{hud,char,offers,boosters,nav,decor}/` |
