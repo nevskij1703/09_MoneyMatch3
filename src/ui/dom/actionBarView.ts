@@ -17,6 +17,8 @@ export interface ActionBarCallbacks {
   /** Захват бустера из инвентаря для drag-постановки на поле (только если в инвентаре есть штуки). */
   onBoosterPickup(id: BoosterId, e: PointerEvent): void;
   onTab(id: TabId): void;
+  /** Тап по центральной вкладке «Play» — вернуться к игре (закрыть открытое окно вкладки). */
+  onPlay(): void;
 }
 
 interface BoosterUi { id: BoosterId; count: HTMLDivElement; }
@@ -36,7 +38,7 @@ const TABS: { id: TabId | 'play'; icon: string; label: string }[] = [
   { id: 'build', icon: 'build.png', label: 'Build' },
   { id: 'tasks', icon: 'tasks.png', label: 'Tasks' },
   { id: 'play', icon: 'play.png', label: 'Play' },
-  { id: 'collections', icon: 'build.png', label: 'Collections' }, // иконка-заглушка (арт коллекций в макете нет)
+  { id: 'collections', icon: 'collections.png', label: 'Collections' },
   { id: 'shop', icon: 'shop.png', label: 'Shop' },
 ];
 
@@ -91,7 +93,10 @@ export class ActionBarView {
       icon.src = `assets/nav/${t.icon}`; icon.alt = ''; icon.draggable = false;
       el('div', { cls: 'hb-nav-label', text: t.label, parent: tab });
       // Выделением управляет GameApp (переезжает на время открытого окна, потом — обратно на Play).
-      tab.addEventListener('pointerup', () => { if (t.id !== 'play') this.callbacks.onTab(t.id); });
+      tab.addEventListener('pointerup', () => {
+        if (t.id === 'play') this.callbacks.onPlay();
+        else this.callbacks.onTab(t.id);
+      });
       this.tabEls.push(tab);
     });
     this.highlight('play'); // старт — «Play»

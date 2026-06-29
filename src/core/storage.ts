@@ -18,6 +18,13 @@ export function defaultBoosters(): Record<BoosterId, number> {
   return out as Record<BoosterId, number>;
 }
 
+/** Стартовые шаги построек окна Build — все по 0 (ничего не прокачано). */
+export function defaultBuild(): { steps: Record<string, number> } {
+  const steps: Record<string, number> = {};
+  for (const b of balance.build.buildings) steps[b.id] = 0;
+  return { steps };
+}
+
 export function DEFAULT_DATA(): SaveData {
   return {
     balance: balance.economy.startBalance,
@@ -28,6 +35,7 @@ export function DEFAULT_DATA(): SaveData {
     energy: balance.energy.max,
     energyTs: 0,
     boosters: defaultBoosters(),
+    build: defaultBuild(),
     totalCollected: 0,
     bestCombo: 0,
     settings: { sound: true, vibration: true },
@@ -104,6 +112,19 @@ function mergeBoosters(incoming: any): Record<BoosterId, number> {
   return out;
 }
 
+/** Мёрдж шагов построек: только известные id, шаг клампится в [0, upgradesPerBuilding]. */
+function mergeBuild(incoming: any): { steps: Record<string, number> } {
+  const max = balance.build.upgradesPerBuilding;
+  const src = (incoming && typeof incoming === 'object' && incoming.steps && typeof incoming.steps === 'object')
+    ? incoming.steps : {};
+  const steps: Record<string, number> = {};
+  for (const b of balance.build.buildings) {
+    const v = src[b.id];
+    steps[b.id] = (typeof v === 'number' && Number.isFinite(v) && v >= 0) ? Math.min(max, Math.floor(v)) : 0;
+  }
+  return { steps };
+}
+
 function num(v: any, def: number, min = 0): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= min ? v : def;
 }
@@ -131,6 +152,7 @@ function mergeDefaults(state: any): SaveState {
     energy: Math.floor(num(incoming.energy, d0.data.energy)),
     energyTs: num(incoming.energyTs, 0),
     boosters: mergeBoosters(incoming.boosters),
+    build: mergeBuild(incoming.build),
     totalCollected: num(incoming.totalCollected, 0),
     bestCombo: Math.floor(num(incoming.bestCombo, 0)),
     settings: { ...d0.data.settings, ...(incoming?.settings ?? {}) },

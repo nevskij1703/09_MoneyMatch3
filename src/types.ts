@@ -75,6 +75,12 @@ export interface SaveData {
   energyTs: number;
   /** Инвентарь бустеров — счётчик по id (bomb/drone/rocket/magnet, кнопки внизу). */
   boosters: Record<BoosterId, number>;
+  /**
+   * Окно «Build» — прокачка построек локации. steps: текущий шаг (0..upgradesPerBuilding)
+   * по id постройки (balance.build.buildings). Пока одна активная локация (Jet); будущие
+   * локации добавятся отдельной миграцией. Отсутствующий ключ = 0 (не прокачано).
+   */
+  build: { steps: Record<string, number> };
   /** Всего собрано за всё время (стат + хук будущей прогрессии). */
   totalCollected: number;
   /** Самая глубокая каскад-комбинация за всё время (стат). */

@@ -1139,7 +1139,8 @@ body {
 .hb-booster-ghost img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 /* ── Нижнее меню (5 вкладок) ───────────────────────────────────────────────── */
-.hb-nav { position: absolute; }
+/* z=45: над оверлеем окна Build (z=40), но под «призраком» бустера (z=50) и комбо (z=60). */
+.hb-nav { position: absolute; z-index: 45; }
 .hb-nav-base {
   position: absolute; left: 8px; right: 8px; top: 0; height: 82px; border-radius: 16px;
   background: linear-gradient(180deg, rgba(0, 119, 255, 0.66) 0%, rgba(0, 119, 255, 0) 100%), #0a2358;
@@ -1155,3 +1156,78 @@ body {
 .hb-nav-icon { position: absolute; left: 50%; top: 8px; width: 46px; height: 46px; transform: translateX(-50%); object-fit: contain; display: block; }
 .hb-nav-label { position: absolute; left: 0; top: 58px; width: 100%; text-align: center; font: 800 11px 'Roboto Flex', 'Nunito', sans-serif; color: rgba(255, 255, 255, 0.5); }
 .hb-nav-tab.active .hb-nav-label { color: #fff; }
+
+/* ═══════════════════ Окно «Build» (прокачка локации) ═══════════════════ */
+/* Полноэкранный оверлей внутри #stage; лежит ПОД nav (z=45). Скрыт по умолчанию (display:none). */
+.build-window {
+  position: absolute; left: 0; top: 0; width: 390px; height: 844px;
+  display: none; z-index: 40; overflow: hidden;
+  background: radial-gradient(125% 80% at 50% 0%, #1d4ea0 0%, #0d2f78 55%, #081f54 100%);
+}
+
+/* Фон: арт локации + затемнение верхней и нижней зон. */
+.bw-loc { position: absolute; left: 0; top: 71px; width: 390px; height: 584px; object-fit: cover; object-position: center top; pointer-events: none; }
+.bw-grad-top { position: absolute; left: 0; top: 0; width: 390px; height: 209px; pointer-events: none;
+  background: linear-gradient(180deg, #001d5b 0%, #001d5b 48.5%, rgba(0, 29, 91, 0.5) 83%, rgba(0, 29, 91, 0) 100%); }
+.bw-grad-btm { position: absolute; left: 0; top: 567px; width: 390px; height: 277px; pointer-events: none;
+  background: linear-gradient(to top, #001d5b 0%, #001d5b 31%, rgba(0, 29, 91, 0) 100%); }
+
+/* ── Верхняя панель: аватар · money · diamonds · energy · settings ── */
+.bw-toolbar { position: absolute; left: 0; top: 52px; width: 390px; height: 50px;
+  display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; box-sizing: border-box; }
+.bw-avatar { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+.bw-counter { position: relative; flex: 0 0 auto; width: 82px; height: 21px; border-radius: 10.5px;
+  border: 1px solid rgba(61, 197, 255, 0.3); display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px 0 3px; box-sizing: border-box; filter: drop-shadow(0 1px 0.5px rgba(0, 0, 0, 0.25)); }
+.bw-counter-left { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.bw-counter-ico { width: 18px; height: 18px; object-fit: contain; flex: 0 0 auto; }
+.bw-counter-ico.diamond { width: 16px; height: 16px; }
+.bw-counter-ico.energy { width: 12px; height: 16px; }
+.bw-counter-val { font: 700 13px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; white-space: nowrap; }
+.bw-e-max { font-size: 11px; opacity: 0.5; margin-left: 1px; }
+.bw-add { width: 14px; height: 14px; border-radius: 5px; flex: 0 0 auto; cursor: pointer;
+  background: linear-gradient(180deg, #075bd9 0%, #0849af 100%); border: 0.5px solid #fff;
+  box-shadow: 0 2px 1px rgba(0, 0, 0, 0.25); color: #fff; font: 700 12px 'Roboto Flex', sans-serif; line-height: 12px; text-align: center; }
+.bw-settings { width: 30px; height: 30px; object-fit: contain; flex: 0 0 auto; cursor: pointer; }
+
+/* ── Ряд локаций (визуал; интерактивна только активная) ── */
+.bw-locs { position: absolute; left: 0; top: 116px; width: 390px; height: 75px; }
+.bw-locs-bar { position: absolute; left: 48px; top: 26px; width: 294px; height: 7px; }
+.bw-locs-track { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); border-radius: 999px; }
+.bw-locs-fill { position: absolute; left: 0; top: 0; height: 7px; max-width: 100%; border-radius: 999px;
+  background: #1eff00; box-shadow: 0 0 3px #15ff00; transition: width 0.4s ease; }
+.bw-locs-row { position: absolute; left: 0; top: 0; width: 390px; height: 75px;
+  display: flex; align-items: flex-start; justify-content: center; gap: 18px; }
+.bw-spot { position: relative; width: 56px; height: 75px; cursor: pointer; }
+.bw-spot-circle { position: absolute; left: 0; top: 0; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; box-sizing: border-box;
+  background: linear-gradient(180deg, #1b4fa6 0%, #0a2156 100%); border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2), 0 2px 3px rgba(0, 0, 0, 0.35); }
+.bw-spot-circle.now { border-color: #fee900; box-shadow: 0 0 8px 1px rgba(255, 233, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.25); }
+.bw-spot-circle.locked { filter: saturate(0.7) brightness(0.85); }
+.bw-spot-img { position: absolute; left: 3px; top: 3px; width: 50px; height: 50px; object-fit: contain; }
+.bw-spot-badge { position: absolute; right: -2px; top: 38px; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; font-size: 10px; line-height: 1; }
+.bw-spot-badge.done { background: #1eb800; color: #fff; font-weight: 900; }
+.bw-spot-badge.lock { background: #0a2156; }
+.bw-spot-label { position: absolute; left: -8px; right: -8px; top: 60px; text-align: center; white-space: nowrap;
+  font: 700 12px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4); }
+
+/* ── Карточки построек ── */
+.bw-list { position: absolute; left: 0; top: 612px; width: 390px; height: 129px;
+  display: flex; align-items: flex-start; justify-content: center; gap: 7px; padding: 0 14px; box-sizing: border-box; }
+.bw-card { position: relative; width: 66px; height: 129px; border-radius: 10px; cursor: pointer; box-sizing: border-box;
+  background: linear-gradient(180deg, #092e81 0%, #001e62 100%); border: 1px solid rgba(0, 149, 255, 0.3); }
+.bw-card.ready { background: linear-gradient(180deg, #1ca800 0%, #106000 100%); border-color: #ffea00; box-shadow: 0 0 9px 0 #ffcc00; }
+.bw-card-content { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 5px; padding: 8px 6px; box-sizing: border-box; }
+.bw-card-name { font: 700 12px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; white-space: nowrap; }
+.bw-card.dim .bw-card-name, .bw-card.dim .bw-cost-val { color: rgba(255, 255, 255, 0.5); }
+.bw-card-art { width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25)); }
+.bw-card.dim .bw-card-art { opacity: 0.8; }
+.bw-steps { display: flex; align-items: center; justify-content: space-between; width: 46px; height: 6px; }
+.bw-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(0, 0, 0, 0.4); box-sizing: border-box; }
+.bw-dot.on { background: #ffea00; box-shadow: 0 0 3px rgba(255, 234, 0, 0.7); }
+.bw-cost { display: flex; align-items: center; justify-content: center; gap: 2px; height: 18px; }
+.bw-cost-ico { width: 16px; height: 16px; object-fit: contain; }
+.bw-cost-val { font: 700 12px 'Roboto Flex', 'Nunito', sans-serif; color: #fff; white-space: nowrap; }
+.bw-card-max { font: 800 12px 'Roboto Flex', 'Nunito', sans-serif; color: #ffea00; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }

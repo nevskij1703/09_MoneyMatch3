@@ -25,6 +25,26 @@ export interface BoosterDef {
   starterCount: number;
 }
 
+/** Постройка локации в окне Build (карточка, прокачивается до upgradesPerBuilding раз). */
+export interface BuildBuildingDef {
+  /** Стабильный id (ключ шагов в сейве, не зависит от порядка). */
+  id: string;
+  /** Имя для UI (англ.). */
+  name: string;
+  /** Файл арта постройки в public/assets/build/items/. */
+  art: string;
+}
+
+/** Локация в верхнем ряду окна Build (пока активна хардкодно одна — см. activeLocation). */
+export interface BuildLocationDef {
+  id: string;
+  name: string;
+  /** Файл миниатюры локации в public/assets/build/spots/. */
+  art: string;
+  /** Состояние точки: пройдена / текущая / закрыта. */
+  state: 'done' | 'active' | 'locked';
+}
+
 export interface Balance {
   /** Жёсткий cap тира (защита tierValue/арта). Активный набор задаёт tierCount. */
   maxTier: number;
@@ -89,6 +109,28 @@ export interface Balance {
     /** 4 бустера-кнопки (bomb/drone/rocket/magnet; эффекты — будущее). На поле НЕ спавнятся. */
     definitions: BoosterDef[];
   };
+  /**
+   * Окно «Build» (вкладка слева внизу): прокачка построек текущей локации.
+   * Цены прокачки — геометрическая лесенка от costMin (1-й шаг 1-й постройки) до costMax
+   * (последний шаг последней постройки), равномерно по всем building×step ячейкам.
+   * В будущем локаций станет несколько; пока активна одна (activeLocation).
+   */
+  build: {
+    /** Сколько раз можно прокачать каждую постройку. */
+    upgradesPerBuilding: number;
+    /** Цена самого дешёвого шага (1-я постройка, 1-й шаг). */
+    costMin: number;
+    /** Цена самого дорогого шага (последняя постройка, последний шаг). */
+    costMax: number;
+    /** Индекс активной (хардкодно открытой) локации в locations. Пока 2-я (Jet). */
+    activeLocation: number;
+    /** Файл арта-фона активной локации в public/assets/build/. */
+    locationArt: string;
+    /** Верхний ряд локаций (визуал; интерактивна только активная). */
+    locations: BuildLocationDef[];
+    /** Постройки активной локации, по возрастанию цены (порядок = индекс лесенки). */
+    buildings: BuildBuildingDef[];
+  };
 }
 
 export const balance: Balance = {
@@ -145,6 +187,27 @@ export const balance: Balance = {
       { id: 'drone',  name: 'Drone',  glyph: '🛸', starterCount: 8 },
       { id: 'rocket', name: 'Rocket', glyph: '🚀', starterCount: 12 },
       { id: 'magnet', name: 'Magnet', glyph: '🧲', starterCount: 0 },
+    ],
+  },
+  build: {
+    upgradesPerBuilding: 5,
+    costMin: 1_000,    // 1K — дешёвый первый шаг
+    costMax: 9.99e15,  // 9.99Qa — самый дорогой шаг
+    activeLocation: 1, // хардкодно открыта 2-я локация (Jet); остальные — done/locked (визуал)
+    locationArt: 'loc-jet.png',
+    locations: [
+      { id: 'office',    name: 'Office',    art: 'office.png',    state: 'done'   },
+      { id: 'jet',       name: 'Jet',       art: 'jet.png',       state: 'active' },
+      { id: 'garage',    name: 'Garage',    art: 'garage.png',    state: 'locked' },
+      { id: 'penthouse', name: 'Penthouse', art: 'penthouse.png', state: 'locked' },
+      { id: 'yacht',     name: 'Yacht',     art: 'yacht.png',     state: 'locked' },
+    ],
+    buildings: [
+      { id: 'seats',  name: 'Seats',  art: 'seats.png'  },
+      { id: 'table',  name: 'Table',  art: 'table.png'  },
+      { id: 'shelf',  name: 'Shelf',  art: 'shelf.png'  },
+      { id: 'tv',     name: 'TV',     art: 'tv.png'     },
+      { id: 'dishes', name: 'Dishes', art: 'dishes.png' },
     ],
   },
 };

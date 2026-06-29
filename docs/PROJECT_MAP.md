@@ -9,7 +9,8 @@
 рождает **бустер на поле** (T/L→💣, линия-4→🚀, 2×2→🛸 дрон, линия-5→🧲); плюс **кнопки-бустеры** внизу.
 На поле также **собираемые** (💎 алмаз / ⚡ молния / 🎁 сейф-лутбокс) — собираются схлопом рядом/бустером.
 Энергия тратится в момент свайпа. Над полем — карта баланса с маскотом,
-офферы (SALE / Watch Ad), строка Level / Energy / Income. Снизу — меню из 5 вкладок.
+офферы (SALE / Watch Ad), строка Level / Energy / Income. Снизу — меню из 5 вкладок; **Build**
+(слева) открывает окно прокачки локации (постройки за деньги), **Play** возвращает к игре.
 
 > Кодовая база/сейв — `MoneyMatch3` / `mmatch_save`. «Hamster Bank» — отображаемый бренд
 > (макет Figma «Play window», дизайн-холст **390×844**).
@@ -18,7 +19,7 @@
 
 | Что меняем | Файл |
 |---|---|
-| Любая цифра баланса (тиры, board 6×5, minLine/rocketLineLen, energy, startLevel, бустеры, шансы 💎/⚡/🎁) | [src/config/balance.ts](../src/config/balance.ts) |
+| Любая цифра баланса (тиры, board 6×5, minLine/rocketLineLen, energy, startLevel, бустеры, шансы 💎/⚡/🎁, **build** — постройки/локации/цены) | [src/config/balance.ts](../src/config/balance.ts) |
 | Кор-логика match-3 (свап, матчи, каскад, гравитация+спавн 💎/⚡/🎁, сбор собираемых, дедлок) | [src/core/match3.ts](../src/core/match3.ts) |
 | Тип-гарды `isBooster`/`isCollectible`, конверсии координат, getSpecial | [src/core/board.ts](../src/core/board.ts) |
 | Ценность схлопа (каскад-комбо) → Баланс | [src/core/economy.ts](../src/core/economy.ts) |
@@ -28,7 +29,9 @@
 | Карта Баланс+Алмазы + маскот + декор | [src/ui/dom/balanceCardView.ts](../src/ui/dom/balanceCardView.ts) |
 | Офферы SALE / Watch Ad | [src/ui/dom/offersView.ts](../src/ui/dom/offersView.ts) |
 | Строка Level / Energy / Income | [src/ui/dom/infoRowView.ts](../src/ui/dom/infoRowView.ts) |
-| Низ: 4 кнопки-бустера (drag-источник на поле) + меню 5 вкладок | [src/ui/dom/actionBarView.ts](../src/ui/dom/actionBarView.ts) |
+| Низ: 4 кнопки-бустера (drag-источник на поле) + меню 5 вкладок (Build открывает окно, Play закрывает) | [src/ui/dom/actionBarView.ts](../src/ui/dom/actionBarView.ts) |
+| Окно «Build» (вкладка слева): счётчики, ряд локаций, арт локации, карточки построек, прокачка | [src/ui/dom/buildWindowView.ts](../src/ui/dom/buildWindowView.ts) |
+| Логика Build (цена-лесенка costMin→costMax, buildStep/canUpgrade/locationProgress) | [src/core/build.ts](../src/core/build.ts) |
 | Спрайт тира (PNG 128×128 на всю клетку) / fallback-круг | [src/ui/dom/tierArt.ts](../src/ui/dom/tierArt.ts) |
 | Оркестратор экрана (FIT 390×844, сбор→карта, заглушки) | [src/app/GameApp.ts](../src/app/GameApp.ts) |
 | Сохранение / миграции / mergeDefaults | [src/core/storage.ts](../src/core/storage.ts), [src/core/migrations.ts](../src/core/migrations.ts) |
@@ -62,6 +65,7 @@ src/
 │   ├── money.ts             tierValue=t (линейно: T_t стоит t), formatMoney, formatMoneyFull (все знаки), getTierStyle
 │   ├── energy.ts            regenEnergy/energyToNextMs/hasEnergyForMove/spendEnergyForMove
 │   ├── boosters.ts          BoosterId (bomb/drone/rocket/magnet) + shuffleBoard (только плитки, спецобъекты на местах)
+│   ├── build.ts             Окно Build (PURE): buildUpgradeCost (геом. лесенка costMin→costMax), buildStep/canUpgrade/isMaxed/locationProgress
 │   ├── storage.ts           localStorage 'mmatch_save': load/save/getState/update/reset, mergeDefaults
 │   ├── migrations.ts        Каскадные миграции (сейчас v1 = identity), self-test
 │   ├── balanceRuntime.ts    Dev-override 'mmatch_balance_override' (DEV only)
@@ -78,7 +82,8 @@ src/
     │   ├── infoRowView.ts   Level / Energy / Income (из сейва/конфига)
     │   ├── boardView.ts     Синяя база + 6×5: свайп-ввод, рендер плиток/бустеров/собираемых; ЕДИНЫЙ detonateBlasts (все активации/цепочки/комбо: каждый бустер бьёт из своего центра, дрон взлетает), полёт дрона/💎/⚡, реакция-гравитация/досыпка
     │   ├── match3Fx.ts      WAAPI VFX сбора
-    │   └── actionBarView.ts 4 круглые кнопки-бустера (счётчик; drag-источник постановки на поле) + нижнее меню 5 вкладок (Игра — центр)
+    │   ├── actionBarView.ts 4 круглые кнопки-бустера (счётчик; drag-источник постановки на поле) + нижнее меню 5 вкладок (Игра — центр)
+    │   └── buildWindowView.ts Окно «Build» (оверлей z=40 под nav z=45): счётчики money/💎/⚡, ряд локаций, арт локации, карточки построек, прокачка
     │
     ├── stubModal.ts         Generic «раздел в разработке»
     ├── settingsModal.ts     Настройки (sound/vibration; точка входа на экране пока заглушка)

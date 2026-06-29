@@ -21,6 +21,7 @@ import { OffersView } from '../ui/dom/offersView';
 import { InfoRowView } from '../ui/dom/infoRowView';
 import { BoardView } from '../ui/dom/boardView';
 import { ActionBarView, type TabId } from '../ui/dom/actionBarView';
+import { BuildWindowView } from '../ui/dom/buildWindowView';
 import { openStubModal } from '../ui/stubModal';
 
 const DESIGN_W = 390;
@@ -33,6 +34,7 @@ export class GameApp {
   private infoRow!: InfoRowView;
   private board!: BoardView;
   private actionBar!: ActionBarView;
+  private buildWindow!: BuildWindowView;
 
   private comboEl: HTMLDivElement | null = null;
   private moveBaseSum = 0; // накопленная база денег за текущий ход (до комбо-бонуса)
@@ -68,6 +70,13 @@ export class GameApp {
     this.actionBar = new ActionBarView(stage, {
       onBoosterPickup: (id, e) => this.onBoosterPickup(id, e),
       onTab: (id) => this.onTab(id),
+      onPlay: () => this.onPlay(),
+    });
+
+    // Окно «Build» — оверлей под nav; открывается вкладкой Build, закрывается Play.
+    this.buildWindow = new BuildWindowView(stage, {
+      onChange: () => this.card.refresh(),
+      onStub: (title, msg) => this.openStub(title, msg),
     });
 
     // Тик энергии: реген по времени + обновление значения/таймера.
@@ -90,10 +99,11 @@ export class GameApp {
   };
   private onPageHide = (): void => { save(); };
 
-  /** 1с тик: восстановить энергию по времени и обновить HUD. */
+  /** 1с тик: восстановить энергию по времени и обновить HUD (и счётчики окна Build, если открыто). */
   private tickEnergy = (): void => {
     regenEnergy(getData(), Date.now());
     this.infoRow.refresh();
+    if (this.buildWindow?.isOpen()) this.buildWindow.refresh();
   };
 
   /** Можно ли сделать ход (хватает ли энергии). Нет → пульс пилюли энергии. */
@@ -276,8 +286,10 @@ export class GameApp {
   }
 
   private onTab(id: TabId): void {
-    const stubs: Record<TabId, [string, string]> = {
-      build: ['🔨 Build', 'Build is coming soon — construct and upgrade your bank here.'],
+    if (id === 'build') { this.openBuild(); return; } // Build — реальное окно, не заглушка
+    // Прочие вкладки — заглушки; уходя с Build, закрываем его окно.
+    this.buildWindow.close();
+    const stubs: Record<Exclude<TabId, 'build'>, [string, string]> = {
       tasks: ['📋 Tasks', 'Tasks are coming soon — daily goals and rewards.'],
       collections: ['🗂️ Collections', 'Collections are coming soon — gather sets and earn bonuses.'],
       shop: ['🛒 Shop', 'Shop is coming soon — 💎 top-ups and booster packs closer to release.'],
@@ -285,6 +297,18 @@ export class GameApp {
     const [title, msg] = stubs[id];
     this.actionBar.highlight(id); // выделение переезжает на вкладку, пока открыт попап…
     openStubModal(title, msg, { onClose: () => this.actionBar.highlight('play') }); // …и возвращается на Play
+  }
+
+  /** Открыть окно «Build» (вкладка слева): выделение на Build, окно поверх экрана Play. */
+  private openBuild(): void {
+    this.actionBar.highlight('build');
+    this.buildWindow.open();
+  }
+
+  /** Тап по «Play»: закрыть окно вкладки (если открыто) и вернуть выделение на Play. */
+  private onPlay(): void {
+    this.buildWindow.close();
+    this.actionBar.highlight('play');
   }
 
   private openStub(title: string, message: string): void {
